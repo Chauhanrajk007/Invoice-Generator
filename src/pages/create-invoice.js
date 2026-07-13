@@ -1,6 +1,14 @@
 /**
  * create-invoice.js — Full invoice form with live preview
  *
+ * Updated for:
+ * - Async Supabase storage (await getSettings, getInvoiceById, etc.)
+ * - RBAC permission checks
+ * - Email Invoice button (mailto + GMass)
+ * - Self-contained inline-styled preview for PDF generation (no CSS variables)
+ * - Status watermark overlay on preview
+ * - Payment details section in preview footer
+ *
  * Edge cases handled:
  * - Empty items array (at least 1 row always present)
  * - NaN in any numeric field (falls back to 0)
@@ -15,12 +23,19 @@ import { calcRowBase, calcRowTax, calcInvoiceSummary, safeNum, round2 } from '..
 import { amountToWords } from '../utils/amount-words.js';
 import { downloadPDF, printInvoice, shareInvoice } from '../utils/pdf.js';
 import { showToast, formatCurrency, todayISO, navigateTo } from '../main.js';
+import { hasPermission, canShow, ACTIONS } from '../utils/rbac.js';
+import { sendInvoiceEmail, composeGMassEmail } from '../utils/email.js';
 
 let autoSaveTimer = null;
 let currentFormData = null;
 
 export async function render(container, options = {}) {
   const isGstMode = options.isGstMode || false;
+
+  // Show a brief loading state
+  container.innerHTML = `
+    <div class="page-header"><div><h1>Loading…</h1></div></div>
+  `;
 
   // Check if we're viewing an existing invoice
   const hash = window.location.hash;
@@ -29,18 +44,21 @@ export async function render(container, options = {}) {
 
   let existingInvoice = null;
   if (existingId) {
-    existingInvoice = getInvoiceById(existingId);
+    existingInvoice = await getInvoiceById(existingId);
   }
 
-  // Load defaults from settings
-  const settings = getSettings();
+  // Load defaults from settings (async)
+  const settings = await getSettings();
 
   // Load draft if no existing invoice
   const draft = (!existingInvoice && !isGstMode) ? getDraft() : null;
 
+  // Peek at next invoice number (async)
+  const nextNumber = await peekNextInvoiceNumber();
+
   // Initialize form data
   const formData = existingInvoice || draft || {
-    invoiceNumber: peekNextInvoiceNumber(),
+    invoiceNumber: nextNumber,
     date: todayISO(),
     businessName: settings.businessName || '',
     businessGstin: settings.gstin || '',
@@ -69,7 +87,7 @@ export async function render(container, options = {}) {
 
   currentFormData = formData;
 
-  renderForm(container, formData, existingInvoice !== null, isGstMode);
+  renderForm(container, formData, existingInvoice !== null, isGstMode, settings);
 }
 
 function createEmptyItem(defaultGst) {
@@ -82,7 +100,7 @@ function createEmptyItem(defaultGst) {
   };
 }
 
-function renderForm(container, formData, isViewMode, isGstMode) {
+function renderForm(container, formData, isViewMode, isGstMode, settings) {
   const summary = calcInvoiceSummary(
     formData.items,
     formData.discountValue,
@@ -91,6 +109,11 @@ function renderForm(container, formData, isViewMode, isGstMode) {
     formData.customerGstin,
     formData.isGstInvoice || isGstMode
   );
+
+  // Store grandTotal on formData for email use
+  formData.grandTotal = summary.grandTotal;
+
+  const showEmailBtn = canShow(ACTIONS.SEND_EMAIL);
 
   container.innerHTML = `
     <div class="page-header">
@@ -293,6 +316,12 @@ function renderForm(container, formData, isViewMode, isGstMode) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             Share
           </button>
+          ${showEmailBtn ? `
+          <button class="btn btn-secondary" id="emailInvoiceBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Email Invoice
+          </button>
+          ` : ''}
         </div>
       </div>
 
@@ -303,24 +332,47 @@ function renderForm(container, formData, isViewMode, isGstMode) {
             <span class="preview-header-title">Live Preview</span>
           </div>
           <div class="preview-body" id="previewBody">
-            ${renderPreview(formData, summary)}
+            ${renderPreview(formData, summary, settings)}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email Modal (hidden by default) -->
+    <div class="modal-overlay" id="emailModal" style="display:none;">
+      <div class="modal-box" style="max-width:440px;">
+        <h3 class="modal-title">Email Invoice</h3>
+        <p class="modal-desc">Send <strong>${escHtml(formData.invoiceNumber || 'this invoice')}</strong> to your customer.</p>
+        <div style="margin:16px 0;">
+          <label class="form-label">Recipient Email</label>
+          <input type="email" class="form-input" id="emailRecipient" value="${escAttr(formData.customerEmail)}" placeholder="customer@email.com" />
+        </div>
+        <div class="modal-actions" style="gap:8px;">
+          <button class="btn btn-secondary" id="emailModalCancel">Cancel</button>
+          <button class="btn btn-primary" id="emailSendMailto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Send via Email
+          </button>
+          <button class="btn btn-secondary" id="emailSendGMass" style="background:#D44638;color:#fff;border-color:#D44638;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Send via GMass
+          </button>
         </div>
       </div>
     </div>
   `;
 
   // ====== EVENT LISTENERS ======
-  bindFormEvents(container, formData, isGstMode);
+  bindFormEvents(container, formData, isGstMode, settings);
 }
 
-function bindFormEvents(container, formData, isGstMode) {
+function bindFormEvents(container, formData, isGstMode, settings) {
   // Generic input handler — updates formData + preview + auto-save
   container.addEventListener('input', (e) => {
     const field = e.target.getAttribute('data-field');
     if (field && field in formData) {
       formData[field] = e.target.value;
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     }
   });
@@ -350,7 +402,7 @@ function bindFormEvents(container, formData, isGstMode) {
       if (totalEl) totalEl.textContent = formatCurrency(rowTotal);
 
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     });
 
@@ -377,7 +429,7 @@ function bindFormEvents(container, formData, isGstMode) {
         tbody.innerHTML = formData.items.map((item, i) => renderItemRow(item, i, isGstMode || formData.isGstInvoice)).join('');
       }
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     });
   }
@@ -385,9 +437,9 @@ function bindFormEvents(container, formData, isGstMode) {
   // Add Item button
   const addBtn = container.querySelector('#addItemBtn');
   if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      const settings = getSettings();
-      formData.items.push(createEmptyItem(settings.defaultGstPercent));
+    addBtn.addEventListener('click', async () => {
+      const latestSettings = await getSettings();
+      formData.items.push(createEmptyItem(latestSettings.defaultGstPercent));
       const tbody = container.querySelector('#itemsBody');
       if (tbody) {
         tbody.innerHTML = formData.items.map((item, i) => renderItemRow(item, i, isGstMode || formData.isGstInvoice)).join('');
@@ -399,7 +451,7 @@ function bindFormEvents(container, formData, isGstMode) {
         }
       }
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     });
   }
@@ -419,12 +471,12 @@ function bindFormEvents(container, formData, isGstMode) {
             handleFileUpload(ev.target.files, (url) => {
               formData.businessLogo = url;
               uploadEl.querySelector('img').src = url;
-              updatePreview(container, formData, isGstMode);
+              updatePreview(container, formData, isGstMode, settings);
               scheduleAutoSave(formData);
             });
           });
         }
-        updatePreview(container, formData, isGstMode);
+        updatePreview(container, formData, isGstMode, settings);
         scheduleAutoSave(formData);
       });
     });
@@ -447,7 +499,7 @@ function bindFormEvents(container, formData, isGstMode) {
       btn.classList.add('active');
       formData.isGstInvoice = btn.getAttribute('data-gst') === 'true';
       // Re-render the whole form to show/hide GST fields
-      renderForm(container, formData, false, isGstMode);
+      renderForm(container, formData, false, isGstMode, settings);
     });
   });
 
@@ -458,7 +510,7 @@ function bindFormEvents(container, formData, isGstMode) {
     discountInput.addEventListener('input', (e) => {
       formData.discountValue = safeNum(e.target.value);
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     });
   }
@@ -466,7 +518,7 @@ function bindFormEvents(container, formData, isGstMode) {
     discountType.addEventListener('change', (e) => {
       formData.discountType = e.target.value;
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, settings);
       scheduleAutoSave(formData);
     });
   }
@@ -474,19 +526,36 @@ function bindFormEvents(container, formData, isGstMode) {
   // Save Draft
   const saveDraftBtn = container.querySelector('#saveDraftBtn');
   if (saveDraftBtn) {
-    saveDraftBtn.addEventListener('click', () => {
+    saveDraftBtn.addEventListener('click', async () => {
       if (!validateRequired(container, formData)) return;
+
+      const allowed = await hasPermission(ACTIONS.CREATE_INVOICE);
+      if (!allowed) {
+        showToast('You don\'t have permission to save invoices.', 'error');
+        return;
+      }
+
       formData.status = 'draft';
       if (!formData.id) {
-        formData.invoiceNumber = getNextInvoiceNumber();
-        container.querySelector('#invNumber').value = formData.invoiceNumber;
+        formData.invoiceNumber = await getNextInvoiceNumber();
+        const invNumEl = container.querySelector('#invNumber');
+        if (invNumEl) invNumEl.value = formData.invoiceNumber;
       }
-      const success = saveInvoice(formData);
+
+      // Compute and store grandTotal before saving
+      const sum = calcInvoiceSummary(
+        formData.items, formData.discountValue, formData.discountType,
+        formData.businessGstin, formData.customerGstin,
+        formData.isGstInvoice || isGstMode
+      );
+      formData.grandTotal = sum.grandTotal;
+
+      const success = await saveInvoice(formData);
       if (success) {
         clearDraft();
         showToast('Invoice saved as draft!', 'success');
       } else {
-        showToast('Failed to save. Storage might be full.', 'error');
+        showToast('Failed to save. Please try again.', 'error');
       }
     });
   }
@@ -494,18 +563,44 @@ function bindFormEvents(container, formData, isGstMode) {
   // Download PDF
   const downloadBtn = container.querySelector('#downloadPdfBtn');
   if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
+    downloadBtn.addEventListener('click', async () => {
       if (!validateRequired(container, formData)) return;
+
+      const allowed = await hasPermission(ACTIONS.CREATE_INVOICE);
+      if (!allowed) {
+        showToast('You don\'t have permission to create invoices.', 'error');
+        return;
+      }
+
       // Save first
       formData.status = formData.status === 'draft' ? 'pending' : formData.status;
       if (!formData.id) {
-        formData.invoiceNumber = getNextInvoiceNumber();
-        container.querySelector('#invNumber').value = formData.invoiceNumber;
+        formData.invoiceNumber = await getNextInvoiceNumber();
+        const invNumEl = container.querySelector('#invNumber');
+        if (invNumEl) invNumEl.value = formData.invoiceNumber;
       }
-      saveInvoice(formData);
+
+      // Compute and store grandTotal
+      const sum = calcInvoiceSummary(
+        formData.items, formData.discountValue, formData.discountType,
+        formData.businessGstin, formData.customerGstin,
+        formData.isGstInvoice || isGstMode
+      );
+      formData.grandTotal = sum.grandTotal;
+
+      await saveInvoice(formData);
       clearDraft();
+
+      // Update preview before PDF capture
+      updatePreview(container, formData, isGstMode, settings);
+
       const preview = container.querySelector('#previewBody');
-      downloadPDF(preview, formData.invoiceNumber || 'invoice');
+      const sum = calcInvoiceSummary(
+        formData.items, formData.discountValue, formData.discountType,
+        formData.businessGstin, formData.customerGstin,
+        formData.isGstInvoice || isGstMode
+      );
+      await downloadPDF(preview, formData.invoiceNumber || 'invoice', formData, sum, settings);
     });
   }
 
@@ -514,7 +609,12 @@ function bindFormEvents(container, formData, isGstMode) {
   if (printBtn) {
     printBtn.addEventListener('click', () => {
       const preview = container.querySelector('#previewBody');
-      printInvoice(preview);
+      const sum = calcInvoiceSummary(
+        formData.items, formData.discountValue, formData.discountType,
+        formData.businessGstin, formData.customerGstin,
+        formData.isGstInvoice || isGstMode
+      );
+      printInvoice(preview, formData, sum, settings);
     });
   }
 
@@ -533,6 +633,66 @@ function bindFormEvents(container, formData, isGstMode) {
         grandTotal: summary.grandTotal,
       });
     });
+  }
+
+  // ====== EMAIL MODAL ======
+  const emailBtn = container.querySelector('#emailInvoiceBtn');
+  const emailModal = container.querySelector('#emailModal');
+  if (emailBtn && emailModal) {
+    emailBtn.addEventListener('click', async () => {
+      const allowed = await hasPermission(ACTIONS.SEND_EMAIL);
+      if (!allowed) {
+        showToast('You don\'t have permission to send emails.', 'error');
+        return;
+      }
+      // Pre-fill recipient
+      const recipientInput = emailModal.querySelector('#emailRecipient');
+      if (recipientInput) recipientInput.value = formData.customerEmail || '';
+      emailModal.style.display = '';
+    });
+
+    // Close modal
+    const cancelBtn = emailModal.querySelector('#emailModalCancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        emailModal.style.display = 'none';
+      });
+    }
+
+    // Click overlay to close
+    emailModal.addEventListener('click', (e) => {
+      if (e.target === emailModal) emailModal.style.display = 'none';
+    });
+
+    // Send via mailto
+    const mailtoBtn = emailModal.querySelector('#emailSendMailto');
+    if (mailtoBtn) {
+      mailtoBtn.addEventListener('click', () => {
+        const recipient = emailModal.querySelector('#emailRecipient')?.value?.trim() || '';
+        if (!recipient) {
+          showToast('Please enter a recipient email.', 'error');
+          return;
+        }
+        sendInvoiceEmail(formData, recipient, settings);
+        emailModal.style.display = 'none';
+        showToast('Opening email client…', 'info');
+      });
+    }
+
+    // Send via GMass
+    const gmassBtn = emailModal.querySelector('#emailSendGMass');
+    if (gmassBtn) {
+      gmassBtn.addEventListener('click', () => {
+        const recipient = emailModal.querySelector('#emailRecipient')?.value?.trim() || '';
+        if (!recipient) {
+          showToast('Please enter a recipient email.', 'error');
+          return;
+        }
+        composeGMassEmail(formData, recipient, settings);
+        emailModal.style.display = 'none';
+        showToast('Opening Gmail…', 'info');
+      });
+    }
   }
 }
 
@@ -617,6 +777,8 @@ function updateSummary(container, formData, isGstMode) {
     formData.businessGstin, formData.customerGstin,
     formData.isGstInvoice || isGstMode
   );
+  formData.grandTotal = summary.grandTotal;
+
   const el = container.querySelector('#summarySection');
   if (el) el.innerHTML = renderSummary(summary, formData);
 
@@ -627,7 +789,7 @@ function updateSummary(container, formData, isGstMode) {
     discountInput.addEventListener('input', (e) => {
       formData.discountValue = safeNum(e.target.value);
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, null);
       scheduleAutoSave(formData);
     });
   }
@@ -635,120 +797,181 @@ function updateSummary(container, formData, isGstMode) {
     discountType.addEventListener('change', (e) => {
       formData.discountType = e.target.value;
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode);
+      updatePreview(container, formData, isGstMode, null);
       scheduleAutoSave(formData);
     });
   }
 }
 
 // ====== LIVE PREVIEW ======
+// CRITICAL: Uses inline styles and hardcoded colors — NO CSS variables.
+// This ensures the PDF renderer captures correct colors.
 
-function renderPreview(formData, summary) {
+function renderPreview(formData, summary, settings) {
   const isGst = formData.isGstInvoice;
-  const settings = getSettings();
+  const s = settings || {};
+
+  const status = (formData.status || 'draft').toUpperCase();
+  const statusColor = status === 'PAID' ? '#22c55e' : status === 'PENDING' ? '#f59e0b' : '#94a3b8';
+
+  // Payment details from settings
+  const bankName = s.bankName || '';
+  const accountNumber = s.accountNumber || '';
+  const ifscCode = s.ifscCode || '';
+  const upiId = s.upiId || '';
+  const hasPaymentInfo = bankName || accountNumber || upiId;
+
+  const itemRows = formData.items.filter(i => i && i.name).map((item, idx) => {
+    const base = calcRowBase(item.qty, item.price);
+    const tax = calcRowTax(item.qty, item.price, item.gstPercent);
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fc';
+    return `
+      <tr style="background:${bgColor};">
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;">${idx + 1}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;">${escHtml(item.name)}</td>
+        ${isGst ? `<td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;">${escHtml(item.hsn) || '-'}</td>` : ''}
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:center;">${safeNum(item.qty)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:right;">${formatCurrency(item.price)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:center;">${safeNum(item.gstPercent)}%</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;text-align:right;font-weight:600;">${formatCurrency(base + tax)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const colSpan = isGst ? 7 : 6;
 
   return `
-    <div class="inv-header">
-      <div>
-        ${formData.businessLogo ? `<img class="inv-logo" src="${formData.businessLogo}" alt="Logo" />` : ''}
-        <div class="inv-party-name" style="margin-top:4px;">${escHtml(formData.businessName) || 'Your Business'}</div>
-        ${formData.businessPhone ? `<div class="inv-party-detail">${escHtml(formData.businessPhone)}</div>` : ''}
-        ${formData.businessEmail ? `<div class="inv-party-detail">${escHtml(formData.businessEmail)}</div>` : ''}
-        ${formData.businessAddress ? `<div class="inv-party-detail">${escHtml(formData.businessAddress)}</div>` : ''}
-        ${formData.businessGstin ? `<div class="inv-party-detail"><strong>GSTIN:</strong> ${escHtml(formData.businessGstin)}</div>` : ''}
-      </div>
-      <div>
-        <div class="inv-title">${isGst ? 'GST INVOICE' : 'INVOICE'}</div>
-        <div class="inv-meta">${escHtml(formData.invoiceNumber) || 'INV-XXXX'}</div>
-        <div class="inv-meta">${formData.date || todayISO()}</div>
-      </div>
-    </div>
+    <div style="position:relative;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#1f2937;background:#ffffff;overflow:hidden;">
 
-    <div class="inv-parties">
-      <div>
-        <div class="inv-party-label">Bill To</div>
-        <div class="inv-party-name">${escHtml(formData.customerName) || 'Customer Name'}</div>
-        ${formData.customerPhone ? `<div class="inv-party-detail">${escHtml(formData.customerPhone)}</div>` : ''}
-        ${formData.customerEmail ? `<div class="inv-party-detail">${escHtml(formData.customerEmail)}</div>` : ''}
-        ${formData.customerAddress ? `<div class="inv-party-detail">${escHtml(formData.customerAddress)}</div>` : ''}
-        ${formData.customerGstin ? `<div class="inv-party-detail"><strong>GSTIN:</strong> ${escHtml(formData.customerGstin)}</div>` : ''}
-      </div>
-      <div></div>
-    </div>
+      <!-- Status Watermark -->
+      <div style="position:absolute;top:60px;right:-20px;transform:rotate(35deg);font-size:54px;font-weight:800;color:${statusColor};opacity:0.08;letter-spacing:6px;pointer-events:none;z-index:0;white-space:nowrap;">${status}</div>
 
-    <table class="inv-items-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Item</th>
-          ${isGst ? '<th>HSN/SAC</th>' : ''}
-          <th>Qty</th>
-          <th>Price</th>
-          <th>GST</th>
-          <th style="text-align:right;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${formData.items.filter(i => i && i.name).map((item, idx) => {
-          const base = calcRowBase(item.qty, item.price);
-          const tax = calcRowTax(item.qty, item.price, item.gstPercent);
-          return `
-            <tr>
-              <td>${idx + 1}</td>
-              <td>${escHtml(item.name)}</td>
-              ${isGst ? `<td>${escHtml(item.hsn) || '-'}</td>` : ''}
-              <td>${safeNum(item.qty)}</td>
-              <td>${formatCurrency(item.price)}</td>
-              <td>${safeNum(item.gstPercent)}%</td>
-              <td style="text-align:right;">${formatCurrency(base + tax)}</td>
+      <!-- Header Bar -->
+      <div style="background:#4F6EF7;color:#ffffff;padding:24px 28px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="flex:1;">
+          ${formData.businessLogo ? `<img src="${formData.businessLogo}" alt="Logo" style="max-height:48px;max-width:120px;margin-bottom:8px;display:block;border-radius:4px;" />` : ''}
+          <div style="font-size:16px;font-weight:700;margin-bottom:2px;">${escHtml(formData.businessName) || 'Your Business'}</div>
+          ${formData.businessPhone ? `<div style="font-size:11px;opacity:0.9;">${escHtml(formData.businessPhone)}</div>` : ''}
+          ${formData.businessEmail ? `<div style="font-size:11px;opacity:0.9;">${escHtml(formData.businessEmail)}</div>` : ''}
+          ${formData.businessAddress ? `<div style="font-size:11px;opacity:0.9;">${escHtml(formData.businessAddress)}</div>` : ''}
+          ${formData.businessGstin ? `<div style="font-size:11px;opacity:0.9;margin-top:2px;">GSTIN: ${escHtml(formData.businessGstin)}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:22px;font-weight:800;letter-spacing:1px;margin-bottom:4px;">${isGst ? 'GST INVOICE' : 'INVOICE'}</div>
+          <div style="font-size:13px;font-weight:600;opacity:0.95;">${escHtml(formData.invoiceNumber) || 'INV-XXXX'}</div>
+          <div style="font-size:12px;opacity:0.85;margin-top:2px;">${formData.date || todayISO()}</div>
+          <div style="margin-top:8px;display:inline-block;padding:3px 12px;border-radius:12px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(255,255,255,0.2);color:#fff;">${status}</div>
+        </div>
+      </div>
+
+      <!-- Bill To -->
+      <div style="padding:20px 28px 12px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;font-weight:600;margin-bottom:6px;">Bill To</div>
+        <div style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:2px;">${escHtml(formData.customerName) || 'Customer Name'}</div>
+        ${formData.customerPhone ? `<div style="font-size:12px;color:#4b5563;">${escHtml(formData.customerPhone)}</div>` : ''}
+        ${formData.customerEmail ? `<div style="font-size:12px;color:#4b5563;">${escHtml(formData.customerEmail)}</div>` : ''}
+        ${formData.customerAddress ? `<div style="font-size:12px;color:#4b5563;">${escHtml(formData.customerAddress)}</div>` : ''}
+        ${formData.customerGstin ? `<div style="font-size:12px;color:#4b5563;margin-top:2px;"><strong>GSTIN:</strong> ${escHtml(formData.customerGstin)}</div>` : ''}
+      </div>
+
+      <!-- Items Table -->
+      <div style="padding:0 28px;">
+        <table style="width:100%;border-collapse:collapse;margin-top:4px;">
+          <thead>
+            <tr style="background:#EEF1FE;">
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">#</th>
+              <th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">Item</th>
+              ${isGst ? '<th style="padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">HSN/SAC</th>' : ''}
+              <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">Qty</th>
+              <th style="padding:8px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">Price</th>
+              <th style="padding:8px 10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">GST</th>
+              <th style="padding:8px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;font-weight:700;border-bottom:2px solid #4F6EF7;">Total</th>
             </tr>
-          `;
-        }).join('')}
-        ${formData.items.filter(i => i && i.name).length === 0 ? `
-          <tr><td colspan="${isGst ? 7 : 6}" style="text-align:center;color:var(--text-muted);padding:16px;">No items added yet</td></tr>
-        ` : ''}
-      </tbody>
-    </table>
-
-    <div class="inv-summary">
-      <div class="inv-summary-row"><span class="label">Subtotal</span><span class="value">${formatCurrency(summary.subtotal)}</span></div>
-      ${summary.discount > 0 ? `<div class="inv-summary-row"><span class="label">Discount</span><span class="value">-${formatCurrency(summary.discount)}</span></div>` : ''}
-      ${isGst ? (summary.interState ? `
-        <div class="inv-summary-row"><span class="label">IGST</span><span class="value">${formatCurrency(summary.igst)}</span></div>
-      ` : `
-        <div class="inv-summary-row"><span class="label">CGST</span><span class="value">${formatCurrency(summary.cgst)}</span></div>
-        <div class="inv-summary-row"><span class="label">SGST</span><span class="value">${formatCurrency(summary.sgst)}</span></div>
-      `) : (summary.totalTax > 0 ? `
-        <div class="inv-summary-row"><span class="label">Tax</span><span class="value">${formatCurrency(summary.totalTax)}</span></div>
-      ` : '')}
-      <div class="inv-summary-row total"><span class="label">Grand Total</span><span class="value">${formatCurrency(summary.grandTotal)}</span></div>
-    </div>
-
-    <div class="inv-amount-words">
-      <strong>Amount in words:</strong> ${amountToWords(summary.grandTotal)}
-    </div>
-
-    <div class="inv-footer">
-      <div class="inv-terms">
-        ${escHtml(formData.termsAndConditions || settings.termsAndConditions || '')}
+          </thead>
+          <tbody>
+            ${itemRows}
+            ${formData.items.filter(i => i && i.name).length === 0 ? `
+              <tr><td colspan="${colSpan}" style="text-align:center;color:#9ca3af;padding:20px;font-size:12px;">No items added yet</td></tr>
+            ` : ''}
+          </tbody>
+        </table>
       </div>
-      <div class="inv-signature">
-        ${(formData.signature || settings.signature) ? `<img src="${formData.signature || settings.signature}" alt="Signature" />` : ''}
-        <div class="inv-signature-line"></div>
-        <div class="inv-signature-label">Authorized Signatory</div>
+
+      <!-- Summary -->
+      <div style="padding:16px 28px 0;display:flex;justify-content:flex-end;">
+        <div style="min-width:220px;">
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#4b5563;">
+            <span>Subtotal</span><span style="font-weight:600;">${formatCurrency(summary.subtotal)}</span>
+          </div>
+          ${summary.discount > 0 ? `
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#ef4444;">
+            <span>Discount</span><span style="font-weight:600;">-${formatCurrency(summary.discount)}</span>
+          </div>
+          ` : ''}
+          ${isGst ? (summary.interState ? `
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#4b5563;">
+              <span>IGST</span><span style="font-weight:600;">${formatCurrency(summary.igst)}</span>
+            </div>
+          ` : `
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#4b5563;">
+              <span>CGST</span><span style="font-weight:600;">${formatCurrency(summary.cgst)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#4b5563;">
+              <span>SGST</span><span style="font-weight:600;">${formatCurrency(summary.sgst)}</span>
+            </div>
+          `) : (summary.totalTax > 0 ? `
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#4b5563;">
+              <span>Tax</span><span style="font-weight:600;">${formatCurrency(summary.totalTax)}</span>
+            </div>
+          ` : '')}
+          <div style="display:flex;justify-content:space-between;padding:8px 0 4px;font-size:14px;font-weight:800;color:#1f2937;border-top:2px solid #4F6EF7;margin-top:4px;">
+            <span>Grand Total</span><span>${formatCurrency(summary.grandTotal)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Amount in Words -->
+      <div style="padding:12px 28px 0;font-size:11px;color:#6b7280;">
+        <strong style="color:#374151;">Amount in words:</strong> ${amountToWords(summary.grandTotal)}
+      </div>
+
+      <!-- Payment Details -->
+      ${hasPaymentInfo ? `
+      <div style="padding:14px 28px 0;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;font-weight:600;margin-bottom:6px;">Payment Details</div>
+        <div style="font-size:11px;color:#374151;line-height:1.6;">
+          ${bankName ? `<div><strong>Bank:</strong> ${escHtml(bankName)}</div>` : ''}
+          ${accountNumber ? `<div><strong>Account:</strong> ${escHtml(accountNumber)}</div>` : ''}
+          ${ifscCode ? `<div><strong>IFSC:</strong> ${escHtml(ifscCode)}</div>` : ''}
+          ${upiId ? `<div><strong>UPI:</strong> ${escHtml(upiId)}</div>` : ''}
+        </div>
+      </div>
+      ` : ''}
+
+      <!-- Footer -->
+      <div style="padding:16px 28px 24px;margin-top:12px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e7eb;">
+        <div style="flex:1;font-size:11px;color:#6b7280;line-height:1.6;max-width:60%;white-space:pre-line;">
+          ${escHtml(formData.termsAndConditions || s.termsAndConditions || '')}
+        </div>
+        <div style="text-align:center;min-width:120px;">
+          ${(formData.signature || s.signature) ? `<img src="${formData.signature || s.signature}" alt="Signature" style="max-height:40px;max-width:120px;margin-bottom:4px;display:block;margin-left:auto;margin-right:auto;" />` : ''}
+          <div style="width:120px;border-top:1px solid #9ca3af;margin:0 auto 4px;"></div>
+          <div style="font-size:10px;color:#6b7280;">Authorized Signatory</div>
+        </div>
       </div>
     </div>
   `;
 }
 
-function updatePreview(container, formData, isGstMode) {
+function updatePreview(container, formData, isGstMode, settings) {
   const summary = calcInvoiceSummary(
     formData.items, formData.discountValue, formData.discountType,
     formData.businessGstin, formData.customerGstin,
     formData.isGstInvoice || isGstMode
   );
+  formData.grandTotal = summary.grandTotal;
   const el = container.querySelector('#previewBody');
-  if (el) el.innerHTML = renderPreview(formData, summary);
+  if (el) el.innerHTML = renderPreview(formData, summary, settings);
 }
 
 // ====== VALIDATION ======

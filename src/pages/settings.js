@@ -1,12 +1,17 @@
 /**
- * settings.js — Business defaults, invoice preferences, signature upload
+ * settings.js — Business defaults, invoice preferences, payment details,
+ *               email settings, signature upload, and organization management
  */
 
 import { getSettings, saveSettings } from '../utils/storage.js';
+import { getCurrentOrg, updateOrganization } from '../utils/tenant.js';
+import { hasPermission, ACTIONS } from '../utils/rbac.js';
 import { showToast } from '../main.js';
 
 export async function render(container) {
-  const settings = getSettings();
+  const settings = await getSettings();
+  const currentOrg = await getCurrentOrg();
+  const canManageSettings = await hasPermission(ACTIONS.MANAGE_SETTINGS);
 
   container.innerHTML = `
     <div class="page-header">
@@ -17,6 +22,8 @@ export async function render(container) {
     </div>
 
     <div class="card section-gap">
+
+      <!-- Business Details -->
       <div class="settings-section">
         <h3 class="settings-section-title">Business Details</h3>
         <div class="form-row form-row-2 section-gap">
@@ -64,6 +71,7 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- Invoice Preferences -->
       <div class="settings-section">
         <h3 class="settings-section-title">Invoice Preferences</h3>
         <div class="form-row form-row-3 section-gap">
@@ -86,6 +94,7 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- Signature -->
       <div class="settings-section">
         <h3 class="settings-section-title">Signature</h3>
         <div class="form-group">
@@ -100,6 +109,63 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- Payment Details -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Payment Details</h3>
+        <div class="form-row form-row-2 section-gap">
+          <div class="form-group">
+            <label class="form-label">Bank Name</label>
+            <input type="text" class="form-input" id="settBankName" value="${escAttr(settings.bankName)}" placeholder="State Bank of India" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Account Number</label>
+            <input type="text" class="form-input" id="settAccountNumber" value="${escAttr(settings.accountNumber)}" placeholder="1234567890" />
+          </div>
+        </div>
+        <div class="form-row form-row-2 section-gap">
+          <div class="form-group">
+            <label class="form-label">IFSC Code</label>
+            <input type="text" class="form-input" id="settIfscCode" value="${escAttr(settings.ifscCode)}" placeholder="SBIN0001234" maxlength="11" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">UPI ID</label>
+            <input type="text" class="form-input" id="settUpiId" value="${escAttr(settings.upiId)}" placeholder="business@upi" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Email Settings -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Email Settings</h3>
+        <div class="form-row form-row-2 section-gap">
+          <div class="form-group">
+            <label class="form-label">Default CC</label>
+            <input type="email" class="form-input" id="settEmailCc" value="${escAttr(settings.defaultEmailCc)}" placeholder="cc@example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Default BCC</label>
+            <input type="email" class="form-input" id="settEmailBcc" value="${escAttr(settings.defaultEmailBcc)}" placeholder="bcc@example.com" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Organization -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Organization</h3>
+        <div class="form-row form-row-2 section-gap">
+          <div class="form-group">
+            <label class="form-label">Organization Name</label>
+            <input type="text" class="form-input" id="settOrgName" value="${escAttr(currentOrg ? currentOrg.name : '')}" placeholder="My Organization" ${!canManageSettings ? 'disabled' : ''} />
+            ${!canManageSettings ? '<small style="color: var(--text-secondary, #64748b); margin-top: 4px; display: block;">Only admins and owners can edit the organization name.</small>' : ''}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Organization ID</label>
+            <input type="text" class="form-input" value="${escAttr(currentOrg ? currentOrg.id : '—')}" disabled />
+            <small style="color: var(--text-secondary, #64748b); margin-top: 4px; display: block;">Unique identifier — cannot be changed.</small>
+          </div>
+        </div>
+      </div>
+
       <div class="action-bar">
         <button class="btn btn-primary btn-lg" id="saveSettingsBtn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -109,7 +175,7 @@ export async function render(container) {
     </div>
   `;
 
-  // Logo upload
+  // ========== Logo upload ==========
   const logoInput = container.querySelector('#logoInput');
   const logoUpload = container.querySelector('#logoUpload');
   if (logoInput) {
@@ -118,7 +184,7 @@ export async function render(container) {
     });
   }
 
-  // Signature upload
+  // ========== Signature upload ==========
   const sigInput = container.querySelector('#sigInput');
   const sigUpload = container.querySelector('#sigUpload');
   if (sigInput) {
@@ -127,39 +193,74 @@ export async function render(container) {
     });
   }
 
-  // Save
+  // ========== Save ==========
   const saveBtn = container.querySelector('#saveSettingsBtn');
   if (saveBtn) {
-    saveBtn.addEventListener('click', () => {
-      const data = {
-        businessName: getVal('settBusinessName'),
-        gstin: getVal('settGstin').toUpperCase(),
-        phone: getVal('settPhone'),
-        email: getVal('settEmail'),
-        address: getVal('settAddress'),
-        state: getVal('settState'),
-        invoicePrefix: getVal('settPrefix') || 'INV-',
-        startingNumber: Math.max(1, parseInt(getVal('settStartNum')) || 1),
-        defaultGstPercent: Math.max(0, Math.min(28, parseFloat(getVal('settGstPercent')) || 18)),
-        termsAndConditions: getVal('settTerms'),
-      };
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
 
-      // Get images from preview elements if they exist
-      const logoImg = container.querySelector('#logoPreview');
-      if (logoImg) data.logo = logoImg.src;
+      try {
+        const data = {
+          businessName: getVal('settBusinessName'),
+          gstin: getVal('settGstin').toUpperCase(),
+          phone: getVal('settPhone'),
+          email: getVal('settEmail'),
+          address: getVal('settAddress'),
+          state: getVal('settState'),
+          invoicePrefix: getVal('settPrefix') || 'INV-',
+          startingNumber: Math.max(1, parseInt(getVal('settStartNum')) || 1),
+          defaultGstPercent: Math.max(0, Math.min(28, parseFloat(getVal('settGstPercent')) || 18)),
+          termsAndConditions: getVal('settTerms'),
+          bankName: getVal('settBankName'),
+          accountNumber: getVal('settAccountNumber'),
+          ifscCode: getVal('settIfscCode').toUpperCase(),
+          upiId: getVal('settUpiId'),
+          defaultEmailCc: getVal('settEmailCc'),
+          defaultEmailBcc: getVal('settEmailBcc'),
+        };
 
-      const sigImg = container.querySelector('#sigPreview');
-      if (sigImg) data.signature = sigImg.src;
+        // Get images from preview elements if they exist
+        const logoImg = container.querySelector('#logoPreview');
+        if (logoImg) data.logo = logoImg.src;
 
-      const success = saveSettings(data);
-      if (success) {
-        showToast('Settings saved!', 'success');
-      } else {
-        showToast('Failed to save settings. Storage might be full.', 'error');
+        const sigImg = container.querySelector('#sigPreview');
+        if (sigImg) data.signature = sigImg.src;
+
+        const success = await saveSettings(data);
+        if (success) {
+          showToast('Settings saved!', 'success');
+        } else {
+          showToast('Failed to save settings.', 'error');
+        }
+
+        // Update org name if user has permission and value changed
+        if (canManageSettings && currentOrg) {
+          const newOrgName = getVal('settOrgName');
+          if (newOrgName && newOrgName !== currentOrg.name) {
+            const { error } = await updateOrganization(currentOrg.id, { name: newOrgName });
+            if (error) {
+              showToast(`Failed to update organization name: ${error.message || 'Unknown error'}`, 'error');
+            } else {
+              showToast('Organization name updated!', 'success');
+            }
+          }
+        }
+      } catch (err) {
+        showToast('An unexpected error occurred while saving.', 'error');
+        console.error('[settings] save error:', err);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Settings
+        `;
       }
     });
   }
 }
+
+// ========== Helpers ==========
 
 function getVal(id) {
   const el = document.getElementById(id);
@@ -184,7 +285,7 @@ function handleImageUpload(files, uploadEl, previewId, maxWidth) {
 
   const reader = new FileReader();
   reader.onload = (e) => {
-    // Resize image to save localStorage space
+    // Resize image to save storage space
     const img = new Image();
     img.onload = () => {
       try {
@@ -227,4 +328,11 @@ function handleImageUpload(files, uploadEl, previewId, maxWidth) {
 function escAttr(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
 }

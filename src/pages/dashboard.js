@@ -1,13 +1,41 @@
 /**
  * dashboard.js — Dashboard with stats cards and recent invoices table
+ *
+ * Updated for async Supabase storage, RBAC, user/org display.
  */
 
 import { getInvoices } from '../utils/storage.js';
 import { formatCurrency, formatDate, navigateTo } from '../main.js';
+import { getCurrentUser } from '../utils/auth.js';
+import { getCurrentOrg } from '../utils/tenant.js';
+import { canShow, ACTIONS } from '../utils/rbac.js';
 
 export async function render(container) {
-  const invoices = getInvoices();
-  
+  // Show a loading skeleton while we fetch
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="page-header-subtitle">Loading…</p>
+      </div>
+    </div>
+    <div class="stats-grid">
+      ${Array.from({ length: 4 }, () => '<div class="stat-card" style="min-height:88px;opacity:.5;"></div>').join('')}
+    </div>
+  `;
+
+  // Fetch data in parallel
+  const [invoices, user, org] = await Promise.all([
+    getInvoices(),
+    getCurrentUser(),
+    getCurrentOrg(),
+  ]);
+
+  // Greeting
+  const userName = user?.user_metadata?.full_name || user?.email || '';
+  const orgName = org?.name || '';
+  const greeting = userName ? `Welcome back, ${escapeHtml(userName.split(' ')[0])}!` : 'Welcome!';
+
   // Calculate stats safely
   const total = invoices.length;
   const paid = invoices.filter(i => i.status === 'paid').length;
@@ -18,20 +46,24 @@ export async function render(container) {
       const amt = Number(i.grandTotal);
       return sum + (isFinite(amt) ? amt : 0);
     }, 0);
-  
+
   // Get recent invoices (latest 10)
   const recent = invoices.slice(0, 10);
-  
+
+  const showCreate = canShow(ACTIONS.CREATE_INVOICE);
+
   container.innerHTML = `
     <div class="page-header">
       <div>
-        <h1>Dashboard</h1>
-        <p class="page-header-subtitle">Overview of your invoicing activity</p>
+        <h1>${escapeHtml(greeting)}</h1>
+        <p class="page-header-subtitle">${orgName ? escapeHtml(orgName) + ' — ' : ''}Overview of your invoicing activity</p>
       </div>
+      ${showCreate ? `
       <button class="btn btn-primary btn-lg" id="createNewBtn">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Create Invoice
       </button>
+      ` : ''}
     </div>
 
     <!-- Stats Cards -->
@@ -93,7 +125,7 @@ export async function render(container) {
           </svg>
           <h3 class="empty-state-title">No invoices yet</h3>
           <p class="empty-state-desc">Create your first invoice to get started. It only takes a couple of minutes!</p>
-          <button class="btn btn-primary" id="emptyCreateBtn">Create Your First Invoice</button>
+          ${showCreate ? '<button class="btn btn-primary" id="emptyCreateBtn">Create Your First Invoice</button>' : ''}
         </div>
       ` : `
         <div class="table-wrapper">

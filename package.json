@@ -1,7 +1,8 @@
 {
-  "name": "invoice-generator",
+  "name": "invoiceflow",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Multi-tenant invoice management SaaS with Supabase, RBAC, GST support, email integration, and professional PDF export",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,5 +11,6 @@
   },
   "devDependencies": {
     "vite": "^6.3.1"
-  }
+  },
+  "license": "MIT"
 }
