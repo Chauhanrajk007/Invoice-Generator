@@ -595,11 +595,6 @@ function bindFormEvents(container, formData, isGstMode, settings) {
       updatePreview(container, formData, isGstMode, settings);
 
       const preview = container.querySelector('#previewBody');
-      const sum = calcInvoiceSummary(
-        formData.items, formData.discountValue, formData.discountType,
-        formData.businessGstin, formData.customerGstin,
-        formData.isGstInvoice || isGstMode
-      );
       await downloadPDF(preview, formData.invoiceNumber || 'invoice', formData, sum, settings);
     });
   }
