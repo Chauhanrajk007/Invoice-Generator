@@ -122,7 +122,7 @@ export async function render(container) {
                   <tr${rowClass}>
                     <td>
                       <div class="team-user-cell">
-                        <span class="fw-600">${escapeHtml(member.user_id)}</span>
+                        <span class="fw-600" title="${escapeHtml(member.user_id)}">${escapeHtml(member.email || member.user_id)}</span>
                         ${isCurrentUser ? '<span class="badge badge-draft" style="font-size: 0.65rem; margin-left: 6px;">You</span>' : ''}
                       </div>
                     </td>
@@ -327,5 +327,5 @@ function escapeHtml(str) {
 
 function escAttr(str) {
   if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

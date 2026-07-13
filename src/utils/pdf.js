@@ -13,6 +13,7 @@
  */
 
 import { showToast } from '../main.js';
+import { amountToWords } from '../utils/amount-words.js';
 
 /**
  * Generate professional invoice HTML for PDF/Print.
@@ -37,8 +38,7 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   // Amount in words
   let amountWords = '';
   try {
-    // We can't dynamically import in a template, so we'll compute it inline
-    amountWords = numberToWordsINR(summary.grandTotal);
+    amountWords = amountToWords(summary.grandTotal);
   } catch {
     amountWords = '';
   }
@@ -208,38 +208,6 @@ function esc(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function numberToWordsINR(amount) {
-  if (amount === null || amount === undefined || amount === '') return 'Zero Rupees Only';
-  let num = Number(amount);
-  if (!isFinite(num) || num < 0) return 'Zero Rupees Only';
-  num = Math.round(num * 100) / 100;
-  if (num === 0) return 'Zero Rupees Only';
-
-  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
-    'Eighteen', 'Nineteen'];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-  function twoDigit(n) { n = Math.floor(n); if (n < 20) return ones[n]; return tens[Math.floor(n/10)] + (n%10 ? ' ' + ones[n%10] : ''); }
-  function threeDigit(n) { n = Math.floor(n); if (n < 100) return twoDigit(n); return ones[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + twoDigit(n%100) : ''); }
-
-  const intPart = Math.floor(num);
-  const decPart = Math.round((num - intPart) * 100);
-  let n = intPart;
-  const parts = [];
-
-  if (n >= 10000000) { parts.push(threeDigit(Math.floor(n / 10000000)) + ' Crore'); n %= 10000000; }
-  if (n >= 100000) { parts.push(twoDigit(Math.floor(n / 100000)) + ' Lakh'); n %= 100000; }
-  if (n >= 1000) { parts.push(twoDigit(Math.floor(n / 1000)) + ' Thousand'); n %= 1000; }
-  if (n > 0) parts.push(threeDigit(n));
-
-  let words = parts.length > 0 ? parts.join(' ') : 'Zero';
-  let result = words + ' Rupee' + (intPart === 1 ? '' : 's');
-  if (decPart > 0) result += ' and ' + twoDigit(decPart) + ' Pais' + (decPart === 1 ? 'a' : 'e');
-  else result += ' Only';
-  return result;
-}
-
 /**
  * Download the invoice as a PDF.
  * Creates a dedicated container with the professional template to avoid the white sheet bug.
@@ -251,10 +219,11 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
   }
 
   const safeName = String(filename || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
+  let container = null;
 
   try {
     // Create a temporary container with the professional template
-    const container = document.createElement('div');
+    container = document.createElement('div');
     container.style.position = 'fixed';
     container.style.left = '-9999px';
     container.style.top = '0';
@@ -305,12 +274,14 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
 
     await html2pdf().set(opt).from(container).save();
 
-    // Cleanup
-    document.body.removeChild(container);
     showToast('PDF downloaded successfully!', 'success');
   } catch (err) {
     console.error('[pdf] Download failed:', err);
     showToast('Failed to generate PDF. Please try again.', 'error');
+  } finally {
+    if (container && container.parentNode) {
+      try { document.body.removeChild(container); } catch {}
+    }
   }
 }
 

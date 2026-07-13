@@ -160,8 +160,8 @@ export function showConfirm(title, description) {
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal-box">
-        <h3 class="modal-title">${title}</h3>
-        <p class="modal-desc">${description}</p>
+        <h3 class="modal-title">${escHtml(title)}</h3>
+        <p class="modal-desc">${escHtml(description)}</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" id="modalCancel">Cancel</button>
           <button class="btn btn-danger" id="modalConfirm">Confirm</button>

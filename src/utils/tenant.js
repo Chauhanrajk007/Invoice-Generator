@@ -128,9 +128,13 @@ export async function getOrgMembers(orgId) {
   // Alternative: use Supabase Edge Function or store email on invite
   const enriched = [];
   for (const member of (data || [])) {
+    // Attempt to display a readable identifier: show truncated user_id as fallback
+    const displayId = member.user_id
+      ? member.user_id.substring(0, 8) + '…'
+      : 'Unknown';
     enriched.push({
       ...member,
-      email: member.user_id, // Will be resolved client-side from the session
+      email: displayId,
     });
   }
 

@@ -1702,12 +1702,7 @@ img { max-width: 100%; height: auto; }
 /* =============================================
    NEW: Auth Pages (Login / Register)
    ============================================= */
-.auth-page {
-  display: flex;
-  min-height: 100vh;
-  width: 100vw;
-  position: relative;
-}
+/* .auth-page is injected inline by login.js / register.js */
 
 .auth-brand-panel {
   flex: 1;

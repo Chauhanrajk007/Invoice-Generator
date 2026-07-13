@@ -28,6 +28,9 @@ import { sendInvoiceEmail, composeGMassEmail } from '../utils/email.js';
 
 let autoSaveTimer = null;
 let currentFormData = null;
+let currentSettings = null;
+let formAbortController = null;
+let isSaving = false;
 
 export async function render(container, options = {}) {
   const isGstMode = options.isGstMode || false;
@@ -86,6 +89,7 @@ export async function render(container, options = {}) {
   }
 
   currentFormData = formData;
+  currentSettings = settings;
 
   renderForm(container, formData, existingInvoice !== null, isGstMode, settings);
 }
@@ -101,6 +105,10 @@ function createEmptyItem(defaultGst) {
 }
 
 function renderForm(container, formData, isViewMode, isGstMode, settings) {
+  // Abort previous event listeners to prevent accumulation
+  if (formAbortController) formAbortController.abort();
+  formAbortController = new AbortController();
+  currentSettings = settings;
   const summary = calcInvoiceSummary(
     formData.items,
     formData.discountValue,
@@ -372,10 +380,10 @@ function bindFormEvents(container, formData, isGstMode, settings) {
     const field = e.target.getAttribute('data-field');
     if (field && field in formData) {
       formData[field] = e.target.value;
-      updatePreview(container, formData, isGstMode, settings);
+      updatePreview(container, formData, isGstMode, currentSettings);
       scheduleAutoSave(formData);
     }
-  });
+  }, { signal: formAbortController.signal });
 
   // Items table delegation
   const itemsBody = container.querySelector('#itemsBody');
@@ -499,7 +507,7 @@ function bindFormEvents(container, formData, isGstMode, settings) {
       btn.classList.add('active');
       formData.isGstInvoice = btn.getAttribute('data-gst') === 'true';
       // Re-render the whole form to show/hide GST fields
-      renderForm(container, formData, false, isGstMode, settings);
+      renderForm(container, formData, false, isGstMode, currentSettings);
     });
   });
 
@@ -527,6 +535,7 @@ function bindFormEvents(container, formData, isGstMode, settings) {
   const saveDraftBtn = container.querySelector('#saveDraftBtn');
   if (saveDraftBtn) {
     saveDraftBtn.addEventListener('click', async () => {
+      if (isSaving) return;
       if (!validateRequired(container, formData)) return;
 
       const allowed = await hasPermission(ACTIONS.CREATE_INVOICE);
@@ -535,27 +544,37 @@ function bindFormEvents(container, formData, isGstMode, settings) {
         return;
       }
 
-      formData.status = 'draft';
-      if (!formData.id) {
-        formData.invoiceNumber = await getNextInvoiceNumber();
-        const invNumEl = container.querySelector('#invNumber');
-        if (invNumEl) invNumEl.value = formData.invoiceNumber;
-      }
+      isSaving = true;
+      saveDraftBtn.disabled = true;
+      saveDraftBtn.textContent = 'Saving…';
 
-      // Compute and store grandTotal before saving
-      const sum = calcInvoiceSummary(
-        formData.items, formData.discountValue, formData.discountType,
-        formData.businessGstin, formData.customerGstin,
-        formData.isGstInvoice || isGstMode
-      );
-      formData.grandTotal = sum.grandTotal;
+      try {
+        formData.status = 'draft';
+        if (!formData.id) {
+          formData.invoiceNumber = await getNextInvoiceNumber();
+          const invNumEl = container.querySelector('#invNumber');
+          if (invNumEl) invNumEl.value = formData.invoiceNumber;
+        }
 
-      const success = await saveInvoice(formData);
-      if (success) {
-        clearDraft();
-        showToast('Invoice saved as draft!', 'success');
-      } else {
-        showToast('Failed to save. Please try again.', 'error');
+        // Compute and store grandTotal before saving
+        const sum = calcInvoiceSummary(
+          formData.items, formData.discountValue, formData.discountType,
+          formData.businessGstin, formData.customerGstin,
+          formData.isGstInvoice || isGstMode
+        );
+        formData.grandTotal = sum.grandTotal;
+
+        const success = await saveInvoice(formData);
+        if (success) {
+          clearDraft();
+          showToast('Invoice saved as draft!', 'success');
+        } else {
+          showToast('Failed to save. Please try again.', 'error');
+        }
+      } finally {
+        isSaving = false;
+        saveDraftBtn.disabled = false;
+        saveDraftBtn.textContent = 'Save Draft';
       }
     });
   }
@@ -784,7 +803,7 @@ function updateSummary(container, formData, isGstMode) {
     discountInput.addEventListener('input', (e) => {
       formData.discountValue = safeNum(e.target.value);
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode, null);
+      updatePreview(container, formData, isGstMode, currentSettings);
       scheduleAutoSave(formData);
     });
   }
@@ -792,7 +811,7 @@ function updateSummary(container, formData, isGstMode) {
     discountType.addEventListener('change', (e) => {
       formData.discountType = e.target.value;
       updateSummary(container, formData, isGstMode);
-      updatePreview(container, formData, isGstMode, null);
+      updatePreview(container, formData, isGstMode, currentSettings);
       scheduleAutoSave(formData);
     });
   }
@@ -1078,7 +1097,7 @@ function handleFileUpload(files, callback) {
 
 function escAttr(str) {
   if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escHtml(str) {

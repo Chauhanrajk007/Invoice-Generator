@@ -109,7 +109,7 @@ async function renderList(container) {
                   <td>${formatDate(inv.date || inv.createdAt)}</td>
                   <td class="text-right fw-600">${formatCurrency(inv.grandTotal)}</td>
                   <td>
-                    <select class="badge badge-${inv.status || 'draft'} status-select" data-id="${inv.id}" style="border:none;cursor:pointer;font-size:0.75rem;font-weight:600;padding:3px 8px;border-radius:20px;background-color:inherit;color:inherit;">
+                    <select class="badge badge-${inv.status || 'draft'} status-select" data-id="${escAttr(inv.id)}" style="border:none;cursor:pointer;font-size:0.75rem;font-weight:600;padding:3px 8px;border-radius:20px;background-color:inherit;color:inherit;">
                       <option value="draft" ${inv.status === 'draft' ? 'selected' : ''}>Draft</option>
                       <option value="pending" ${inv.status === 'pending' ? 'selected' : ''}>Pending</option>
                       <option value="paid" ${inv.status === 'paid' ? 'selected' : ''}>Paid</option>
@@ -117,14 +117,14 @@ async function renderList(container) {
                   </td>
                   <td class="text-center">
                     <div style="display:flex;gap:4px;justify-content:center;">
-                      <button class="btn btn-ghost btn-sm view-btn" data-id="${inv.id}" title="View">View</button>
+                      <button class="btn btn-ghost btn-sm view-btn" data-id="${escAttr(inv.id)}" title="View">View</button>
                       ${showEmail ? `
                       <button class="btn btn-ghost btn-sm email-btn" data-id="${inv.id}" data-email="${escAttr(inv.customerEmail)}" data-name="${escAttr(inv.customerName)}" data-number="${escAttr(inv.invoiceNumber)}" data-total="${inv.grandTotal}" title="Email" style="color:var(--primary);">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                       </button>
                       ` : ''}
                       ${showDelete ? `
-                      <button class="btn btn-ghost btn-sm delete-btn" data-id="${inv.id}" title="Delete" style="color:var(--danger);">Delete</button>
+                      <button class="btn btn-ghost btn-sm delete-btn" data-id="${escAttr(inv.id)}" title="Delete" style="color:var(--danger);">Delete</button>
                       ` : ''}
                     </div>
                   </td>
@@ -257,5 +257,5 @@ function escapeHtml(str) {
 
 function escAttr(str) {
   if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

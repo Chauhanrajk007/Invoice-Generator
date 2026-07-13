@@ -149,7 +149,7 @@ export async function render(container) {
                   <td class="text-right fw-600">${formatCurrency(inv.grandTotal)}</td>
                   <td><span class="badge badge-${inv.status || 'draft'}">${capitalize(inv.status || 'draft')}</span></td>
                   <td class="text-center">
-                    <button class="btn btn-ghost btn-sm view-invoice-btn" data-id="${inv.id}">View</button>
+                    <button class="btn btn-ghost btn-sm view-invoice-btn" data-id="${escapeAttr(inv.id)}">View</button>
                   </td>
                 </tr>
               `).join('')}
@@ -188,4 +188,9 @@ function escapeHtml(str) {
 function capitalize(str) {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

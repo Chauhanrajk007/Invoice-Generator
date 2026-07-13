@@ -327,7 +327,7 @@ function handleImageUpload(files, uploadEl, previewId, maxWidth) {
 
 function escAttr(str) {
   if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeHtml(str) {

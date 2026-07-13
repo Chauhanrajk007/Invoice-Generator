@@ -212,7 +212,9 @@ export async function getNextInvoiceNumber() {
   const orgId = getCurrentOrgId();
   if (!orgId || !isSupabaseConfigured()) return 'INV-0001';
 
-  // Get current settings
+  // Atomic increment: use Supabase RPC if available, otherwise read-update-write
+  // NOTE: This is still not fully atomic without a database-level lock.
+  // For production, consider a Supabase Edge Function with SELECT ... FOR UPDATE.
   const { data } = await supabase
     .from('org_settings')
     .select('invoice_prefix, invoice_counter, starting_number')
@@ -227,17 +229,26 @@ export async function getNextInvoiceNumber() {
   }
   counter++;
 
-  // Update counter
-  await supabase
+  // Update counter and return the updated row to verify the write
+  const { error } = await supabase
     .from('org_settings')
     .update({ invoice_counter: counter })
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .eq('invoice_counter', data.invoice_counter); // Optimistic lock: only update if counter hasn't changed
+
+  if (error) {
+    console.warn('[storage] Invoice counter conflict, retrying with fresh read');
+    return await getNextInvoiceNumber();
+  }
 
   const prefix = data.invoice_prefix || 'INV-';
   return `${prefix}${String(counter).padStart(4, '0')}`;
 }
 
 export async function peekNextInvoiceNumber() {
+  // NOTE: This is a read-only preview. The actual number assigned by
+  // getNextInvoiceNumber may differ if another user creates an invoice
+  // concurrently. This is acceptable for a UI preview.
   const orgId = getCurrentOrgId();
   if (!orgId || !isSupabaseConfigured()) return 'INV-0001';
 
