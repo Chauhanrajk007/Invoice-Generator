@@ -1147,26 +1147,63 @@ img { max-width: 100%; height: auto; }
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text);
-  animation: toastIn 300ms ease;
-  max-width: 360px;
+  max-width: 400px;
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
+  transition: all 300ms ease;
+  cursor: pointer;
 }
 
-.toast.success { border-left: 4px solid var(--accent); }
-.toast.error { border-left: 4px solid var(--danger); }
-.toast.info { border-left: 4px solid var(--primary); }
-
-.toast.removing {
-  animation: toastOut 200ms ease forwards;
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(12px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+.toast-removing {
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
 }
 
-@keyframes toastOut {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(12px) scale(0.96); }
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.toast-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toast-success {
+  border-left: 4px solid #10b981;
+}
+.toast-success .toast-icon { color: #10b981; }
+
+.toast-error {
+  border-left: 4px solid var(--danger, #ef4444);
+}
+.toast-error .toast-icon { color: var(--danger, #ef4444); }
+
+.toast-warning {
+  border-left: 4px solid #f59e0b;
+}
+.toast-warning .toast-icon { color: #f59e0b; }
+
+.toast-info {
+  border-left: 4px solid var(--primary, #4F6EF7);
+}
+.toast-info .toast-icon { color: var(--primary, #4F6EF7); }
+
+@media (max-width: 640px) {
+  .toast-container {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+  }
+  .toast {
+    max-width: 100%;
+  }
 }
 
 /* ---------- Logo Upload ---------- */
@@ -1294,7 +1331,8 @@ img { max-width: 100%; height: auto; }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
   z-index: 500;
   display: flex;
   align-items: center;
@@ -1305,23 +1343,48 @@ img { max-width: 100%; height: auto; }
 .modal-box {
   background: var(--card);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   padding: 28px;
-  max-width: 400px;
+  max-width: 420px;
   width: 90%;
+  animation: modalSlideIn 200ms ease;
+}
+
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .modal-title {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.15rem;
+  font-weight: 700;
   margin-bottom: 8px;
 }
 
 .modal-desc {
   font-size: 0.875rem;
   color: var(--text-secondary);
-  margin-bottom: 20px;
-  line-height: 1.5;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+
+.modal-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.15);
 }
 
 .modal-actions {

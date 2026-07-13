@@ -222,12 +222,11 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
   let container = null;
 
   try {
-    // Create a temporary container with the professional template
+    // Create a temporary container with the professional template.
+    // CRITICAL: Must be in-viewport (not off-screen) for html2canvas to capture it.
+    // We use opacity:0 + pointer-events:none so it's invisible but renderable.
     container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.style.width = '210mm';
+    container.style.cssText = 'position:absolute;left:0;top:0;width:210mm;z-index:-1;opacity:0.01;pointer-events:none;';
     document.body.appendChild(container);
 
     if (formData && summary) {
@@ -262,8 +261,10 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
         useCORS: true,
         logging: false,
         letterRendering: true,
-        width: 794, // A4 at 96dpi
-        windowWidth: 794,
+        width: container.scrollWidth,
+        height: container.scrollHeight,
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
       },
       jsPDF: {
         unit: 'mm',
@@ -295,7 +296,7 @@ export function printInvoice(previewElement, formData, summary, settings) {
       : previewElement.innerHTML;
 
     const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:100%;height:100%;border:none;opacity:0;';
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow.document;
@@ -316,12 +317,11 @@ export function printInvoice(previewElement, formData, summary, settings) {
 </html>`);
     doc.close();
 
-    iframe.contentWindow.onload = () => {
-      setTimeout(() => {
-        try { iframe.contentWindow.print(); } catch { window.print(); }
-        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000);
-      }, 500);
-    };
+    // Wait for fonts + content to fully render before printing
+    setTimeout(() => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { window.print(); }
+      setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000);
+    }, 800);
   } catch (err) {
     console.error('[pdf] Print failed:', err);
     window.print();

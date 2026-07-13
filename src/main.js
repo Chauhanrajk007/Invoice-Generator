@@ -15,24 +15,41 @@ import { warmRoleCache, clearRoleCache, canShow, ACTIONS, getCachedRole, getRole
 
 // ========== TOAST SYSTEM ==========
 
-export function showToast(message, type = 'info', duration = 3000) {
+const TOAST_ICONS = {
+  success: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  error: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  warning: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+};
+
+export function showToast(message, type = 'info', duration) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
 
+  // Longer duration for errors so user can read them
+  if (!duration) {
+    duration = type === 'error' ? 6000 : type === 'warning' ? 5000 : 3000;
+  }
+
   const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message || 'Something happened';
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</span><span class="toast-text">${message || 'Something happened'}</span>`;
   container.appendChild(toast);
 
+  // Trigger enter animation
+  requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
   const timer = setTimeout(() => {
-    toast.classList.add('removing');
-    setTimeout(() => { try { container.removeChild(toast); } catch {} }, 200);
+    toast.classList.remove('toast-visible');
+    toast.classList.add('toast-removing');
+    setTimeout(() => { try { container.removeChild(toast); } catch {} }, 300);
   }, Math.max(1000, duration));
 
   toast.addEventListener('click', () => {
     clearTimeout(timer);
-    toast.classList.add('removing');
-    setTimeout(() => { try { container.removeChild(toast); } catch {} }, 200);
+    toast.classList.remove('toast-visible');
+    toast.classList.add('toast-removing');
+    setTimeout(() => { try { container.removeChild(toast); } catch {} }, 300);
   });
 }
 
@@ -186,6 +203,49 @@ export function showConfirm(title, description) {
   });
 }
 
+export function showPrompt(title, description, placeholder) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3 class="modal-title">${escHtml(title)}</h3>
+        <p class="modal-desc">${escHtml(description)}</p>
+        <input type="text" class="modal-input" placeholder="${escAttr(placeholder || '')}" autofocus />
+        <div class="modal-actions" style="margin-top: 20px;">
+          <button class="btn btn-secondary" id="modalCancel">Cancel</button>
+          <button class="btn btn-primary" id="modalConfirm">Create</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('.modal-input');
+    input.focus();
+
+    const cleanup = (result) => {
+      try { document.body.removeChild(overlay); } catch {}
+      resolve(result);
+    };
+
+    const submit = () => {
+      const val = input.value.trim();
+      if (!val) { input.focus(); return; }
+      cleanup(val);
+    };
+
+    overlay.querySelector('#modalCancel').addEventListener('click', () => cleanup(null));
+    overlay.querySelector('#modalConfirm').addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+
+    const handler = (e) => {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', handler); cleanup(null); }
+    };
+    document.addEventListener('keydown', handler);
+  });
+}
+
 // ========== FORMAT HELPERS ==========
 
 export function formatCurrency(amount) {
@@ -251,8 +311,8 @@ async function updateOrgSwitcher() {
   const createBtn = orgDropdown.querySelector('#createNewOrg');
   if (createBtn) {
     createBtn.addEventListener('click', async () => {
-      const name = prompt('Organization name:');
-      if (!name || !name.trim()) return;
+      const name = await showPrompt('New Organization', 'Enter a name for your organization.', 'e.g. Acme Corp');
+      if (!name) return;
       const { createOrganization } = await import('./utils/tenant.js');
       const { data, error } = await createOrganization(name.trim());
       if (error) { showToast(error.message || 'Failed to create org', 'error'); return; }
@@ -327,6 +387,62 @@ async function updateUserInfo() {
   }
 }
 
+// ========== ENSURE ORG EXISTS ==========
+
+async function ensureOrgForUser(user) {
+  if (!user) return;
+  const { isSupabaseConfigured } = await import('./utils/supabase.js');
+  if (!isSupabaseConfigured()) return;
+
+  const currentOrg = getCurrentOrgId();
+  if (currentOrg) return; // Already have an org
+
+  const { supabase } = await import('./utils/supabase.js');
+
+  // Check if user has any org memberships
+  const { data: memberships } = await supabase
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .limit(1);
+
+  if (memberships && memberships.length > 0) {
+    setCurrentOrgId(memberships[0].org_id);
+    return;
+  }
+
+  // No org found — create one for this user
+  const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
+  const orgName = `${fullName}'s Organization`;
+
+  const { data: org, error: orgError } = await supabase
+    .from('organizations')
+    .insert({ name: orgName, created_by: user.id })
+    .select('id')
+    .single();
+
+  if (orgError || !org) {
+    console.error('[app] Failed to create org for user:', orgError);
+    showToast('Failed to set up your organization. Please try refreshing.', 'error');
+    return;
+  }
+
+  // Add user as owner
+  await supabase.from('org_members').insert({
+    org_id: org.id,
+    user_id: user.id,
+    role: 'owner',
+  });
+
+  // Create default settings
+  await supabase.from('org_settings').insert({
+    org_id: org.id,
+    business_name: orgName,
+  });
+
+  setCurrentOrgId(org.id);
+}
+
 // ========== INITIALIZATION ==========
 
 async function initApp() {
@@ -357,11 +473,19 @@ async function initApp() {
 
   // Check auth state
   const user = await getCurrentUser();
-  if (user && getCurrentOrgId()) {
-    await warmRoleCache();
-    updateNavVisibility();
-    updateOrgSwitcher();
-    updateUserInfo();
+  if (user) {
+    await ensureOrgForUser(user);
+    if (getCurrentOrgId()) {
+      await warmRoleCache();
+      updateNavVisibility();
+      updateOrgSwitcher();
+      updateUserInfo();
+    }
+    // Show sidebar now that auth is confirmed
+    const sidebar = document.getElementById('sidebar');
+    const mobileHeader = document.getElementById('mobileHeader');
+    if (sidebar) sidebar.style.display = '';
+    if (mobileHeader) mobileHeader.style.display = '';
   }
 
   // Listen for auth changes
@@ -369,10 +493,17 @@ async function initApp() {
     if (event === 'SIGNED_OUT') {
       navigateTo('login');
     } else if (event === 'SIGNED_IN' && session?.user) {
+      // Ensure org exists for this user
+      await ensureOrgForUser(session.user);
       await warmRoleCache();
       updateNavVisibility();
       updateOrgSwitcher();
       updateUserInfo();
+      // Show sidebar
+      const sidebar = document.getElementById('sidebar');
+      const mobileHeader = document.getElementById('mobileHeader');
+      if (sidebar) sidebar.style.display = '';
+      if (mobileHeader) mobileHeader.style.display = '';
     }
   });
 
@@ -389,6 +520,16 @@ function escHtml(str) {
   const div = document.createElement('div');
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+function escAttr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // Start
