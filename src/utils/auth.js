@@ -150,7 +150,30 @@ export async function signIn(email, password) {
     }
   }
 
-  return { data, error: error ? { message: friendlyAuthError(error) } : null };
+  // Pass raw error info so caller can detect email-not-confirmed specifically
+  if (error) {
+    const rawMsg = String(error?.message || '').toLowerCase();
+    if (rawMsg.includes('email not confirmed') || rawMsg.includes('email address has not been confirmed')) {
+      return { data: null, error: { message: 'Email not confirmed', code: 'EMAIL_NOT_CONFIRMED' } };
+    }
+    return { data: null, error: { message: friendlyAuthError(error) } };
+  }
+
+  return { data, error: null };
+}
+
+/**
+ * Resend email verification for a given email address.
+ */
+export async function resendVerification(email) {
+  if (!isSupabaseConfigured()) return { error: { message: 'Supabase not configured' } };
+
+  return safeSupabaseCall(() =>
+    supabase.auth.resend({
+      type: 'signup',
+      email,
+    })
+  );
 }
 
 /**

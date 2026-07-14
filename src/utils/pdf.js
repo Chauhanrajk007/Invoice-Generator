@@ -24,185 +24,192 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   const isGst = formData.isGstInvoice;
   const status = (formData.status || 'draft').toUpperCase();
 
-  // Status watermark color
-  const watermarkColors = {
-    PAID: '#10B981',
-    PENDING: '#F59E0B',
-    DRAFT: '#94A3B8',
-  };
+  const watermarkColors = { PAID: '#10B981', PENDING: '#F59E0B', DRAFT: '#94A3B8' };
   const wmColor = watermarkColors[status] || '#94A3B8';
 
-  // Format currency
+  const statusBg = { PAID: '#ECFDF5', PENDING: '#FFFBEB', DRAFT: '#F1F5F9' };
+  const statusFg = { PAID: '#059669', PENDING: '#D97706', DRAFT: '#64748B' };
+
   const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Amount in words
   let amountWords = '';
-  try {
-    amountWords = amountToWords(summary.grandTotal);
-  } catch {
-    amountWords = '';
-  }
+  try { amountWords = amountToWords(summary.grandTotal); } catch { amountWords = ''; }
 
   const items = (formData.items || []).filter(i => i && i.name);
+  const colCount = isGst ? 7 : 6;
 
   return `
-<div style="position:relative;width:210mm;height:297mm;padding:0;margin:0 auto;background:#ffffff;font-family:'Inter','Segoe UI',Arial,sans-serif;color:#1E293B;font-size:12px;line-height:1.5;overflow:hidden;display:flex;flex-direction:column;">
-  
-  <!-- Status Watermark -->
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:100px;font-weight:900;color:${wmColor};opacity:0.06;pointer-events:none;white-space:nowrap;z-index:0;letter-spacing:8px;">
-    ${status}
+<div style="position:relative;width:794px;min-height:1123px;padding:0;margin:0 auto;background:#ffffff;font-family:'Inter','Segoe UI',system-ui,sans-serif;color:#1E293B;font-size:11px;line-height:1.55;overflow:hidden;">
+
+  <!-- Watermark -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:96px;font-weight:900;color:${wmColor};opacity:0.05;pointer-events:none;white-space:nowrap;z-index:0;letter-spacing:12px;">${status}</div>
+
+  <!-- ═══ HEADER ═══ -->
+  <div style="background:linear-gradient(135deg,#2D3A8C 0%,#4F6EF7 60%,#7B8FF7 100%);padding:32px 40px 28px;position:relative;z-index:1;">
+    <!-- Decorative corner -->
+    <div style="position:absolute;top:0;right:0;width:160px;height:160px;background:radial-gradient(circle at top right,rgba(255,255,255,0.08) 0%,transparent 70%);pointer-events:none;"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative;">
+      <!-- Left: Business Info -->
+      <div style="color:#ffffff;max-width:58%;">
+        ${formData.businessLogo ? `<img src="${formData.businessLogo}" alt="Logo" style="max-width:72px;max-height:44px;margin-bottom:10px;border-radius:6px;background:rgba(255,255,255,0.15);padding:4px;" />` : ''}
+        <div style="font-size:21px;font-weight:800;letter-spacing:-0.3px;margin-bottom:4px;color:#ffffff;font-family:'DM Sans','Inter',sans-serif;">${esc(formData.businessName) || 'Your Business'}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.8);line-height:1.6;">
+          ${[formData.businessAddress, formData.businessPhone, formData.businessEmail].filter(Boolean).map(esc).join('&nbsp;&nbsp;·&nbsp;&nbsp;')}
+        </div>
+        ${formData.businessGstin ? `<div style="font-size:10.5px;color:rgba(255,255,255,0.7);margin-top:5px;letter-spacing:0.3px;">GSTIN: <span style="color:rgba(255,255,255,0.95);font-weight:600;">${esc(formData.businessGstin)}</span></div>` : ''}
+      </div>
+
+      <!-- Right: Invoice Meta -->
+      <div style="text-align:right;color:#ffffff;">
+        <div style="font-size:30px;font-weight:800;letter-spacing:2px;text-transform:uppercase;font-family:'DM Sans','Inter',sans-serif;opacity:0.95;">${isGst ? 'TAX INVOICE' : 'INVOICE'}</div>
+        <div style="margin-top:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.9);letter-spacing:0.3px;">${esc(formData.invoiceNumber) || 'INV-XXXX'}</div>
+        <div style="font-size:11.5px;margin-top:3px;color:rgba(255,255,255,0.75);">${esc(formData.date) || ''}</div>
+        <div style="margin-top:10px;display:inline-block;padding:4px 16px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.8px;background:${statusBg[status] || '#F1F5F9'};color:${statusFg[status] || '#64748B'};text-transform:uppercase;">${status}</div>
+      </div>
+    </div>
   </div>
 
-  <!-- Header Bar -->
-  <div style="background:linear-gradient(135deg,#4F6EF7 0%,#3B5BDE 100%);padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1;flex-shrink:0;">
-    <div style="color:#ffffff;max-width:55%;">
-      ${formData.businessLogo ? `<img src="${formData.businessLogo}" alt="Logo" style="max-width:80px;max-height:50px;margin-bottom:8px;border-radius:6px;" />` : ''}
-      <div style="font-size:20px;font-weight:700;margin-bottom:2px;color:#ffffff;">${esc(formData.businessName) || 'Your Business'}</div>
-      ${formData.businessPhone ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);margin-top:2px;">${esc(formData.businessPhone)}</div>` : ''}
-      ${formData.businessEmail ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);">${esc(formData.businessEmail)}</div>` : ''}
-      ${formData.businessAddress ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);">${esc(formData.businessAddress)}</div>` : ''}
-      ${formData.businessGstin ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);margin-top:4px;"><strong>GSTIN:</strong> ${esc(formData.businessGstin)}</div>` : ''}
-    </div>
-    <div style="text-align:right;color:#ffffff;">
-      <div style="font-size:28px;font-weight:800;letter-spacing:1px;color:#ffffff;">${isGst ? 'GST INVOICE' : 'INVOICE'}</div>
-      <div style="font-size:14px;font-weight:600;margin-top:6px;color:rgba(255,255,255,0.95);">${esc(formData.invoiceNumber) || 'INV-XXXX'}</div>
-      <div style="font-size:12px;margin-top:2px;color:rgba(255,255,255,0.85);">Date: ${esc(formData.date) || ''}</div>
-      <div style="margin-top:10px;display:inline-block;padding:4px 14px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(255,255,255,0.2);color:#ffffff;text-transform:uppercase;">${status}</div>
-    </div>
-  </div>
+  <!-- Thin accent line -->
+  <div style="height:3px;background:linear-gradient(90deg,#4F6EF7,#7B8FF7,#4F6EF7);position:relative;z-index:1;"></div>
 
-  <!-- Bill To Section -->
-  <div style="padding:24px 36px 16px;display:flex;justify-content:space-between;gap:24px;position:relative;z-index:1;flex-shrink:0;">
+  <!-- ═══ BILL TO + SUMMARY ═══ -->
+  <div style="padding:28px 40px 20px;display:flex;gap:32px;position:relative;z-index:1;">
+    <!-- Bill To -->
     <div style="flex:1;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Bill To</div>
-      <div style="font-size:15px;font-weight:700;color:#1E293B;margin-bottom:4px;">${esc(formData.customerName) || 'Customer Name'}</div>
-      ${formData.customerPhone ? `<div style="font-size:11px;color:#475569;">${esc(formData.customerPhone)}</div>` : ''}
-      ${formData.customerEmail ? `<div style="font-size:11px;color:#475569;">${esc(formData.customerEmail)}</div>` : ''}
-      ${formData.customerAddress ? `<div style="font-size:11px;color:#475569;margin-top:2px;">${esc(formData.customerAddress)}</div>` : ''}
-      ${formData.customerGstin ? `<div style="font-size:11px;color:#475569;margin-top:4px;"><strong>GSTIN:</strong> ${esc(formData.customerGstin)}</div>` : ''}
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#4F6EF7;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <span style="display:inline-block;width:14px;height:2px;background:#4F6EF7;border-radius:1px;"></span>Bill To
+      </div>
+      <div style="font-size:15px;font-weight:700;color:#1E293B;margin-bottom:6px;font-family:'DM Sans','Inter',sans-serif;">${esc(formData.customerName) || 'Customer Name'}</div>
+      <div style="font-size:11px;color:#64748B;line-height:1.7;">
+        ${formData.customerAddress ? `<div>${esc(formData.customerAddress)}</div>` : ''}
+        ${formData.customerPhone ? `<div>${esc(formData.customerPhone)}</div>` : ''}
+        ${formData.customerEmail ? `<div>${esc(formData.customerEmail)}</div>` : ''}
+      </div>
+      ${formData.customerGstin ? `<div style="margin-top:6px;font-size:10.5px;color:#64748B;">GSTIN: <span style="color:#1E293B;font-weight:600;">${esc(formData.customerGstin)}</span></div>` : ''}
     </div>
-    <div style="text-align:right;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Invoice Summary</div>
-      <div style="font-size:11px;color:#475569;">Items: ${items.length}</div>
-      <div style="font-size:11px;color:#475569;">Subtotal: ${fmt(summary.subtotal)}</div>
-      <div style="font-size:16px;font-weight:800;color:#1E293B;margin-top:6px;">${fmt(summary.grandTotal)}</div>
+
+    <!-- Summary Cards -->
+    <div style="width:260px;flex-shrink:0;">
+      <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);border-radius:10px;padding:16px 18px;border:1px solid #E2E8F0;">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#4F6EF7;margin-bottom:10px;">Summary</div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;">
+          <span>Items</span><span style="font-weight:600;color:#1E293B;">${items.length}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;">
+          <span>Subtotal</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.subtotal)}</span>
+        </div>
+        ${summary.discount > 0 ? `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#EF4444;border-bottom:1px solid #E2E8F0;">
+          <span>Discount</span><span style="font-weight:600;">-${fmt(summary.discount)}</span>
+        </div>` : ''}
+        ${isGst ? (summary.interState ? `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;">
+          <span>IGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.igst)}</span>
+        </div>` : `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#64748B;">
+          <span>CGST + SGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.cgst + summary.sgst)}</span>
+        </div>`) : (summary.totalTax > 0 ? `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#64748B;border-bottom:1px solid #E2E8F0;">
+          <span>Tax</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.totalTax)}</span>
+        </div>` : '')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0 4px;margin-top:4px;border-top:2px solid #4F6EF7;">
+          <span style="font-size:13px;font-weight:800;color:#1E293B;">Grand Total</span>
+          <span style="font-size:14px;font-weight:800;color:#4F6EF7;">${fmt(summary.grandTotal)}</span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Items Table -->
-  <div style="padding:0 36px;position:relative;z-index:1;flex-shrink:0;">
-    <table style="width:100%;border-collapse:collapse;margin-top:8px;">
+  <!-- ═══ ITEMS TABLE ═══ -->
+  <div style="padding:0 40px;position:relative;z-index:1;">
+    <table style="width:100%;border-collapse:collapse;">
       <thead>
-        <tr style="background:#EEF1FE;">
-          <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">#</th>
-          <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">Item</th>
-          ${isGst ? '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">HSN/SAC</th>' : ''}
-          <th style="padding:10px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">Qty</th>
-          <th style="padding:10px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">Price</th>
-          <th style="padding:10px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">GST</th>
-          <th style="padding:10px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#4F6EF7;border-bottom:2px solid #D6DDFC;">Total</th>
+        <tr>
+          <th style="padding:10px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;border-radius:6px 0 0 0;">#</th>
+          <th style="padding:10px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;">Item Description</th>
+          ${isGst ? `<th style="padding:10px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;">HSN/SAC</th>` : ''}
+          <th style="padding:10px 14px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;">Qty</th>
+          <th style="padding:10px 14px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;">Rate</th>
+          <th style="padding:10px 14px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;">GST%</th>
+          <th style="padding:10px 14px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;background:#F1F5F9;border-bottom:2px solid #D6DDFC;border-radius:0 6px 0 0;">Amount</th>
         </tr>
       </thead>
       <tbody>
         ${items.length === 0 ? `
-          <tr><td colspan="${isGst ? 7 : 6}" style="text-align:center;padding:24px;color:#94A3B8;font-style:italic;">No items added</td></tr>
+          <tr><td colspan="${colCount}" style="text-align:center;padding:32px 14px;color:#94A3B8;font-style:italic;font-size:12px;">No items added</td></tr>
         ` : items.map((item, idx) => {
           const base = Number(item.qty || 0) * Number(item.price || 0);
           const tax = base * (Number(item.gstPercent || 0) / 100);
           const bg = idx % 2 === 0 ? '#ffffff' : '#FAFBFF';
           return `
             <tr style="background:${bg};">
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#1E293B;">${idx + 1}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:600;color:#1E293B;">${esc(item.name)}</td>
-              ${isGst ? `<td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#475569;">${esc(item.hsn) || '—'}</td>` : ''}
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;color:#1E293B;">${Number(item.qty || 0)}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;color:#1E293B;">${fmt(item.price)}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;color:#1E293B;">${Number(item.gstPercent || 0)}%</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;font-weight:600;color:#1E293B;">${fmt(base + tax)}</td>
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11px;color:#94A3B8;font-weight:600;">${String(idx + 1).padStart(2, '0')}</td>
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11.5px;font-weight:600;color:#1E293B;">${esc(item.name)}</td>
+              ${isGst ? `<td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11px;color:#64748B;">${esc(item.hsn) || '—'}</td>` : ''}
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11px;text-align:center;color:#1E293B;font-weight:500;">${Number(item.qty || 0)}</td>
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11px;text-align:right;color:#64748B;">${fmt(item.price)}</td>
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11px;text-align:center;color:#64748B;">${Number(item.gstPercent || 0)}%</td>
+              <td style="padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:11.5px;text-align:right;font-weight:700;color:#1E293B;">${fmt(base + tax)}</td>
             </tr>`;
         }).join('')}
       </tbody>
     </table>
   </div>
 
-  <!-- Summary -->
-  <div style="padding:16px 36px 0;display:flex;justify-content:flex-end;position:relative;z-index:1;flex-shrink:0;">
-    <div style="width:280px;">
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-        <span>Subtotal</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.subtotal)}</span>
-      </div>
-      ${summary.discount > 0 ? `
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#EF4444;">
-          <span>Discount</span><span style="font-weight:600;">-${fmt(summary.discount)}</span>
-        </div>
-      ` : ''}
-      ${isGst ? (summary.interState ? `
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>IGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.igst)}</span>
-        </div>
-      ` : `
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>CGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.cgst)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>SGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.sgst)}</span>
-        </div>
-      `) : (summary.totalTax > 0 ? `
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>Tax (GST)</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.totalTax)}</span>
-        </div>
-      ` : '')}
-      <div style="display:flex;justify-content:space-between;padding:12px 0 6px;font-size:16px;font-weight:800;color:#1E293B;border-top:2px solid #4F6EF7;margin-top:6px;">
-        <span>Grand Total</span><span>${fmt(summary.grandTotal)}</span>
-      </div>
-    </div>
-  </div>
+  <!-- ═══ BOTTOM SECTION ═══ -->
+  <div style="padding:20px 40px 0;display:flex;gap:24px;position:relative;z-index:1;">
+    <!-- Left: Amount in Words + Payment -->
+    <div style="flex:1;">
+      ${amountWords ? `
+      <div style="background:#F8FAFC;border-radius:8px;padding:10px 14px;font-size:10.5px;color:#64748B;margin-bottom:12px;border-left:3px solid #4F6EF7;">
+        <span style="font-weight:700;color:#1E293B;">Amount in Words:</span> ${amountWords}
+      </div>` : ''}
 
-  <!-- Amount in Words -->
-  ${amountWords ? `
-  <div style="padding:12px 36px;position:relative;z-index:1;flex-shrink:0;">
-    <div style="background:#F8FAFC;border-radius:8px;padding:10px 16px;font-size:11px;color:#475569;">
-      <strong style="color:#1E293B;">Amount in words:</strong> ${amountWords}
+      ${(settings?.bankName || settings?.accountNumber || settings?.upiId) ? `
+      <div style="background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border:1px solid #BBF7D0;border-radius:8px;padding:14px 16px;">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#16A34A;margin-bottom:8px;">Bank / Payment Details</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 28px;font-size:11px;color:#475569;">
+          ${settings.bankName ? `<div><span style="color:#64748B;">Bank:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.bankName)}</span></div>` : ''}
+          ${settings.accountNumber ? `<div><span style="color:#64748B;">A/C No:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.accountNumber)}</span></div>` : ''}
+          ${settings.ifscCode ? `<div><span style="color:#64748B;">IFSC:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.ifscCode)}</span></div>` : ''}
+          ${settings.upiId ? `<div><span style="color:#64748B;">UPI:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.upiId)}</span></div>` : ''}
+        </div>
+      </div>` : ''}
     </div>
-  </div>
-  ` : ''}
 
-  <!-- Payment Details -->
-  ${(settings?.bankName || settings?.accountNumber || settings?.upiId) ? `
-  <div style="padding:8px 36px;position:relative;z-index:1;flex-shrink:0;">
-    <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:12px 16px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#16A34A;margin-bottom:6px;">Payment Details</div>
-      <div style="display:flex;gap:32px;flex-wrap:wrap;font-size:11px;color:#475569;">
-        ${settings.bankName ? `<div><strong style="color:#1E293B;">Bank:</strong> ${esc(settings.bankName)}</div>` : ''}
-        ${settings.accountNumber ? `<div><strong style="color:#1E293B;">A/C:</strong> ${esc(settings.accountNumber)}</div>` : ''}
-        ${settings.ifscCode ? `<div><strong style="color:#1E293B;">IFSC:</strong> ${esc(settings.ifscCode)}</div>` : ''}
-        ${settings.upiId ? `<div><strong style="color:#1E293B;">UPI:</strong> ${esc(settings.upiId)}</div>` : ''}
+    <!-- Right: Signature -->
+    <div style="text-align:center;min-width:160px;padding-top:8px;">
+      ${(formData.signature || settings?.signature) ? `
+        <img src="${formData.signature || settings?.signature}" alt="Signature" style="max-width:120px;max-height:48px;margin-bottom:4px;" />
+      ` : `<div style="height:48px;"></div>`}
+      <div style="width:150px;border-top:1.5px solid #CBD5E1;margin:0 auto;padding-top:6px;">
+        <div style="font-size:9.5px;color:#94A3B8;font-weight:500;">Authorized Signatory</div>
       </div>
     </div>
   </div>
-  ` : ''}
 
-  <!-- Spacer to push footer to bottom -->
-  <div style="flex:1;"></div>
+  <!-- ═══ TERMS ═══ -->
+  ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
+  <div style="padding:14px 40px 0;position:relative;z-index:1;">
+    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#4F6EF7;margin-bottom:5px;">Terms &amp; Conditions</div>
+    <div style="font-size:9.5px;color:#94A3B8;line-height:1.6;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
+  </div>` : ''}
 
-  <!-- Footer: Terms + Signature — always at the bottom of the page -->
-  <div style="padding:20px 36px 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;position:relative;z-index:1;flex-shrink:0;">
-    <div style="flex:1;max-width:60%;">
-      ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Terms &amp; Conditions</div>
-        <div style="font-size:10px;color:#64748B;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
-      ` : ''}
+  <!-- Spacer -->
+  <div style="flex:1;min-height:20px;"></div>
+
+  <!-- ═══ FOOTER ═══ -->
+  <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);padding:12px 40px;display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #E2E8F0;position:relative;z-index:1;">
+    <div style="font-size:9px;color:#94A3B8;font-weight:500;">
+      © ${new Date().getFullYear()} ${esc(formData.businessName) || 'InvoiceFlow'}
     </div>
-    <div style="text-align:center;min-width:150px;">
-      ${(formData.signature || settings?.signature) ? `<img src="${formData.signature || settings?.signature}" alt="Signature" style="max-width:120px;max-height:50px;margin-bottom:4px;" />` : ''}
-      <div style="width:140px;border-top:1px solid #CBD5E1;margin:0 auto;padding-top:6px;font-size:10px;color:#64748B;">Authorized Signatory</div>
+    <div style="font-size:9px;color:#94A3B8;font-weight:500;display:flex;align-items:center;gap:6px;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Powered by InvoiceFlow &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
     </div>
   </div>
 
-  <!-- Bottom Bar — copyright always at the very bottom -->
-  <div style="background:#EEF1FE;padding:10px 36px;text-align:center;font-size:9px;color:#4F6EF7;border-top:2px solid #D6DDFC;position:relative;z-index:1;flex-shrink:0;font-weight:600;letter-spacing:0.3px;">
-    © ${new Date().getFullYear()} ${esc(formData.businessName) || 'InvoiceFlow'} &nbsp;|&nbsp; Generated by InvoiceFlow &nbsp;|&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-  </div>
 </div>`;
 }
 

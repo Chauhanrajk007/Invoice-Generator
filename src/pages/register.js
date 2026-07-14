@@ -2,7 +2,7 @@
  * register.js — Sign Up page with premium auth layout
  */
 
-import { signUp } from '../utils/auth.js';
+import { signUp, resendVerification } from '../utils/auth.js';
 import { showToast, navigateTo } from '../main.js';
 
 function escAttr(str) {
@@ -404,6 +404,135 @@ function injectAuthStyles() {
         padding: 28px 20px;
         border-radius: 16px;
       }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function showVerificationScreen(container, email) {
+  const card = container.querySelector('.auth-card');
+  if (!card) return;
+
+  // Add verification-specific styles
+  injectVerificationStyles();
+
+  card.innerHTML = `
+    <div class="auth-verify-screen">
+      <div class="auth-verify-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4F6EF7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+      </div>
+      <h2 style="font-family:'DM Sans','Inter',sans-serif;font-size:24px;font-weight:700;color:#1e293b;margin-bottom:12px;letter-spacing:-0.5px;">Check your email</h2>
+      <p style="font-size:14px;color:#64748b;line-height:1.6;margin-bottom:8px;">
+        We've sent a verification link to
+      </p>
+      <p style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:24px;word-break:break-all;">
+        ${escAttr(email)}
+      </p>
+      <div class="auth-verify-steps">
+        <div class="auth-verify-step">
+          <span class="auth-verify-step-num">1</span>
+          <span>Open your email inbox</span>
+        </div>
+        <div class="auth-verify-step">
+          <span class="auth-verify-step-num">2</span>
+          <span>Click the verification link</span>
+        </div>
+        <div class="auth-verify-step">
+          <span class="auth-verify-step-num">3</span>
+          <span>Return here to sign in</span>
+        </div>
+      </div>
+      <button class="auth-submit-btn" id="verifyGoToLogin" style="margin-top:24px;background:linear-gradient(135deg,#4F6EF7,#4338ca);">
+        Go to Sign In
+      </button>
+      <div style="margin-top:16px;font-size:13px;color:#94a3b8;text-align:center;">
+        Didn't get the email?
+        <button class="auth-footer-link" id="verifyResendBtn" style="background:none;border:none;font-size:13px;">
+          Resend verification
+        </button>
+      </div>
+    </div>
+  `;
+
+  const goToLoginBtn = card.querySelector('#verifyGoToLogin');
+  goToLoginBtn.addEventListener('click', () => navigateTo('login'));
+
+  const resendBtn = card.querySelector('#verifyResendBtn');
+  resendBtn.addEventListener('click', async () => {
+    resendBtn.disabled = true;
+    resendBtn.textContent = 'Sending...';
+    try {
+      const { error } = await resendVerification(email);
+      if (error) {
+        showToast('Could not resend email. Please try again.', 'error');
+      } else {
+        showToast('Verification email sent! Check your inbox.', 'success', 5000);
+        resendBtn.textContent = 'Sent!';
+      }
+    } catch {
+      showToast('Could not resend email. Please try again.', 'error');
+    }
+    if (resendBtn.textContent === 'Sending...') {
+      resendBtn.disabled = false;
+      resendBtn.textContent = 'Resend verification';
+    }
+  });
+}
+
+function injectVerificationStyles() {
+  if (document.getElementById('auth-verify-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'auth-verify-styles';
+  style.textContent = `
+    .auth-verify-screen {
+      text-align: center;
+      padding: 12px 0;
+      animation: authCardIn 0.4s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    .auth-verify-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(79,110,247,0.1), rgba(67,56,202,0.08));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      animation: verifyPulse 2s ease-in-out infinite;
+    }
+    @keyframes verifyPulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79,110,247,0.15); }
+      50% { transform: scale(1.04); box-shadow: 0 0 0 12px rgba(79,110,247,0); }
+    }
+    .auth-verify-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+      margin: 20px 0 8px;
+    }
+    .auth-verify-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13.5px;
+      color: #475569;
+    }
+    .auth-verify-step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #f1f5f9;
+      color: #4F6EF7;
+      font-weight: 700;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
   `;
   document.head.appendChild(style);
@@ -852,7 +981,8 @@ export async function render(container) {
       }
 
       showToast('Account created! Please check your email to confirm.', 'success', 5000);
-      navigateTo('login');
+      // Show verification screen instead of redirecting to login
+      showVerificationScreen(container, email);
     } catch (err) {
       console.error('[register] Sign up failed:', err);
       showToast('An unexpected error occurred. Please try again.', 'error');

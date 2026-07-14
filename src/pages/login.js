@@ -2,7 +2,7 @@
  * login.js — Sign In page with premium auth layout
  */
 
-import { signIn } from '../utils/auth.js';
+import { signIn, resendVerification } from '../utils/auth.js';
 import { showToast, navigateTo } from '../main.js';
 
 function escAttr(str) {
@@ -378,6 +378,65 @@ function injectAuthStyles() {
       height: 18px;
     }
 
+    .auth-verify-alert {
+      background: linear-gradient(135deg, #eff6ff, #f0f4ff);
+      border: 1px solid #c7d2fe;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      animation: authCardIn 0.3s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+
+    .auth-verify-alert-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .auth-verify-alert-inner svg {
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .auth-verify-alert-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 3px;
+    }
+
+    .auth-verify-alert-desc {
+      font-size: 12.5px;
+      color: #475569;
+      line-height: 1.5;
+    }
+
+    .auth-verify-resend-btn {
+      width: 100%;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      color: #4F6EF7;
+      background: #fff;
+      border: 1.5px solid #c7d2fe;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+
+    .auth-verify-resend-btn:hover:not(:disabled) {
+      background: #4F6EF7;
+      color: #fff;
+      border-color: #4F6EF7;
+    }
+
+    .auth-verify-resend-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     /* Responsive */
     @media (max-width: 900px) {
       .auth-page {
@@ -486,6 +545,19 @@ export async function render(container) {
           </div>
 
           <form id="loginForm" autocomplete="on" novalidate>
+            <div id="loginVerifyAlert" class="auth-verify-alert" style="display:none;">
+              <div class="auth-verify-alert-inner">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4F6EF7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <div>
+                  <p class="auth-verify-alert-title">Email not verified yet</p>
+                  <p class="auth-verify-alert-desc">Please check your inbox and verify your email before signing in.</p>
+                </div>
+              </div>
+              <button type="button" class="auth-verify-resend-btn" id="loginResendBtn">
+                Resend verification email
+              </button>
+            </div>
+
             <div class="auth-form-group">
               <label for="loginEmail">Email address</label>
               <div class="auth-input-wrapper">
@@ -557,6 +629,8 @@ export async function render(container) {
   const submitBtn = container.querySelector('#loginSubmitBtn');
   const togglePasswordBtn = container.querySelector('#togglePassword');
   const goToRegister = container.querySelector('#goToRegister');
+  const verifyAlert = container.querySelector('#loginVerifyAlert');
+  const resendBtn = container.querySelector('#loginResendBtn');
 
   // Toggle password visibility
   let passwordVisible = false;
@@ -637,7 +711,14 @@ export async function render(container) {
       const { data, error } = await signIn(email, password);
 
       if (error) {
-        showToast(error.message || 'Invalid email or password', 'error');
+        if (error.code === 'EMAIL_NOT_CONFIRMED') {
+          // Show inline verification alert
+          verifyAlert.style.display = 'block';
+          verifyAlert.querySelector('.auth-verify-alert-desc').textContent =
+            `We sent a verification link to ${email}. Please check your inbox.`;
+        } else {
+          showToast(error.message || 'Invalid email or password', 'error');
+        }
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
         return;
@@ -651,6 +732,40 @@ export async function render(container) {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Sign In';
     }
+  });
+
+  // Resend verification email
+  if (resendBtn) {
+    resendBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      if (!email) {
+        showToast('Please enter your email address first.', 'warning');
+        emailInput.focus();
+        return;
+      }
+      resendBtn.disabled = true;
+      resendBtn.textContent = 'Sending...';
+      try {
+        const { error } = await resendVerification(email);
+        if (error) {
+          showToast('Could not resend email. Please try again.', 'error');
+        } else {
+          showToast('Verification email sent! Check your inbox.', 'success', 5000);
+          resendBtn.textContent = 'Sent! Check your inbox';
+        }
+      } catch {
+        showToast('Could not resend email. Please try again.', 'error');
+      }
+      if (resendBtn.textContent === 'Sending...') {
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Resend verification email';
+      }
+    });
+  }
+
+  // Hide verify alert when user changes email
+  emailInput.addEventListener('input', () => {
+    if (verifyAlert) verifyAlert.style.display = 'none';
   });
 
   // Focus the email field on load
