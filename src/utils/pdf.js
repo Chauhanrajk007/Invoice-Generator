@@ -147,49 +147,53 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
     </table>
   </div>
 
-  <!-- ═══ BOTTOM SECTION ═══ -->
-  <div style="padding:14px 40px 0;display:flex;gap:20px;position:relative;z-index:1;">
-    <div style="flex:1;">
-      ${amountWords ? `
-      <div style="background:#F8FAFC;border-radius:6px;padding:8px 12px;font-size:10px;color:#64748B;margin-bottom:10px;border-left:3px solid #4F6EF7;">
-        <span style="font-weight:700;color:#1E293B;">Amount in Words:</span> ${amountWords}
-      </div>` : ''}
-      ${(settings?.bankName || settings?.accountNumber || settings?.upiId) ? `
-      <div style="background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border:1px solid #BBF7D0;border-radius:6px;padding:10px 14px;">
-        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#16A34A;margin-bottom:6px;">Bank / Payment Details</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 24px;font-size:10.5px;color:#475569;">
-          ${settings.bankName ? `<div><span style="color:#64748B;">Bank:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.bankName)}</span></div>` : ''}
-          ${settings.accountNumber ? `<div><span style="color:#64748B;">A/C No:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.accountNumber)}</span></div>` : ''}
-          ${settings.ifscCode ? `<div><span style="color:#64748B;">IFSC:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.ifscCode)}</span></div>` : ''}
-          ${settings.upiId ? `<div><span style="color:#64748B;">UPI:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.upiId)}</span></div>` : ''}
+  <!-- ═══ BOTTOM BLOCK (absolute bottom) ═══ -->
+  <div style="position:absolute;bottom:0;left:0;right:0;z-index:2;">
+
+    <!-- Terms -->
+    ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
+    <div style="padding:0 40px 10px;">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#4F6EF7;margin-bottom:4px;">Terms &amp; Conditions</div>
+      <div style="font-size:9px;color:#94A3B8;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
+    </div>` : ''}
+
+    <!-- Amount in Words + Payment + Signature row -->
+    <div style="padding:0 40px 10px;display:flex;gap:20px;">
+      <div style="flex:1;">
+        ${amountWords ? `
+        <div style="background:#F8FAFC;border-radius:6px;padding:8px 12px;font-size:10px;color:#64748B;margin-bottom:8px;border-left:3px solid #4F6EF7;">
+          <span style="font-weight:700;color:#1E293B;">Amount in Words:</span> ${amountWords}
+        </div>` : ''}
+        ${(settings?.bankName || settings?.accountNumber || settings?.upiId) ? `
+        <div style="background:linear-gradient(135deg,#F0FDF4,#ECFDF5);border:1px solid #BBF7D0;border-radius:6px;padding:10px 14px;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#16A34A;margin-bottom:6px;">Bank / Payment Details</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px 24px;font-size:10.5px;color:#475569;">
+            ${settings.bankName ? `<div><span style="color:#64748B;">Bank:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.bankName)}</span></div>` : ''}
+            ${settings.accountNumber ? `<div><span style="color:#64748B;">A/C No:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.accountNumber)}</span></div>` : ''}
+            ${settings.ifscCode ? `<div><span style="color:#64748B;">IFSC:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.ifscCode)}</span></div>` : ''}
+            ${settings.upiId ? `<div><span style="color:#64748B;">UPI:</span> <span style="font-weight:600;color:#1E293B;">${esc(settings.upiId)}</span></div>` : ''}
+          </div>
+        </div>` : ''}
+      </div>
+      <div style="text-align:center;min-width:140px;padding-top:6px;">
+        ${(formData.signature || settings?.signature) ? `
+          <img src="${formData.signature || settings?.signature}" alt="Signature" style="max-width:110px;max-height:42px;margin-bottom:3px;" />
+        ` : `<div style="height:42px;"></div>`}
+        <div style="width:140px;border-top:1.5px solid #CBD5E1;margin:0 auto;padding-top:5px;">
+          <div style="font-size:9px;color:#94A3B8;font-weight:500;">Authorized Signatory</div>
         </div>
-      </div>` : ''}
-    </div>
-    <div style="text-align:center;min-width:140px;padding-top:6px;">
-      ${(formData.signature || settings?.signature) ? `
-        <img src="${formData.signature || settings?.signature}" alt="Signature" style="max-width:110px;max-height:42px;margin-bottom:3px;" />
-      ` : `<div style="height:42px;"></div>`}
-      <div style="width:140px;border-top:1.5px solid #CBD5E1;margin:0 auto;padding-top:5px;">
-        <div style="font-size:9px;color:#94A3B8;font-weight:500;">Authorized Signatory</div>
       </div>
     </div>
-  </div>
 
-  <!-- ═══ TERMS ═══ -->
-  ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
-  <div style="padding:10px 40px 0;position:relative;z-index:1;">
-    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#4F6EF7;margin-bottom:4px;">Terms &amp; Conditions</div>
-    <div style="font-size:9px;color:#94A3B8;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
-  </div>` : ''}
-
-  <!-- ═══ FOOTER (absolute bottom) ═══ -->
-  <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(135deg,#F8FAFC,#F1F5F9);padding:10px 40px;display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #E2E8F0;z-index:2;">
-    <div style="font-size:9px;color:#94A3B8;font-weight:500;">
-      © ${new Date().getFullYear()} ${esc(formData.businessName) || 'InvoiceFlow'}
-    </div>
-    <div style="font-size:9px;color:#94A3B8;font-weight:500;display:flex;align-items:center;gap:6px;">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Powered by InvoiceFlow &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+    <!-- Footer bar -->
+    <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);padding:10px 40px;display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #E2E8F0;">
+      <div style="font-size:9px;color:#94A3B8;font-weight:500;">
+        © ${new Date().getFullYear()} ${esc(formData.businessName) || 'InvoiceFlow'}
+      </div>
+      <div style="font-size:9px;color:#94A3B8;font-weight:500;display:flex;align-items:center;gap:6px;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Powered by InvoiceFlow &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+      </div>
     </div>
   </div>
 
