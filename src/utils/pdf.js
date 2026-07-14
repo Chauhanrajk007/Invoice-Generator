@@ -212,79 +212,90 @@ function esc(str) {
 }
 
 /**
- * Download the invoice as a PDF.
- * Creates a dedicated container with the professional template to avoid the white sheet bug.
+ * Download the invoice as PDF via browser print dialog.
+ * Opens a popup window with the invoice, then triggers print (Save as PDF).
+ * This approach uses the browser's native rendering engine — no html2canvas needed.
  */
-export async function downloadPDF(previewElement, filename, formData, summary, settings) {
-  if (typeof html2pdf === 'undefined') {
-    showToast('PDF library is still loading. Please try again.', 'error');
-    return;
-  }
-
+export function downloadPDF(previewElement, filename, formData, summary, settings) {
   const safeName = String(filename || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-  // Create a hidden off-screen container — never touch the live preview
-  const container = document.createElement('div');
-  container.style.cssText = [
-    'position:fixed',
-    'top:-9999px',
-    'left:-9999px',
-    'width:794px',          // A4 at 96dpi
-    'height:1123px',        // A4 at 96dpi
-    'overflow:hidden',
-    'background:#ffffff',
-    'z-index:-1',
-    'pointer-events:none',
-  ].join(';');
-
   try {
-    const invoiceHTML = generateProfessionalInvoiceHTML(formData, summary, settings || {});
-    container.innerHTML = invoiceHTML;
-    document.body.appendChild(container);
+    const invoiceHTML = (formData && summary)
+      ? generateProfessionalInvoiceHTML(formData, summary, settings || {})
+      : (previewElement ? previewElement.innerHTML : '');
 
-    // Wait for fonts and images inside the hidden container
-    const imgs = container.querySelectorAll('img');
-    if (imgs.length > 0) {
-      await Promise.all(Array.from(imgs).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise(r => { img.onload = r; img.onerror = r; setTimeout(r, 2000); });
-      }));
+    // Open a popup window — browser renders it natively (colors, gradients, fonts all work)
+    const w = 820;
+    const h = 1160;
+    const left = (screen.width - w) / 2;
+    const top = (screen.height - h) / 2;
+    const popup = window.open('', '_blank', `width=${w},height=${h},left=${left},top=${top}`);
+
+    if (!popup || popup.closed) {
+      showToast('Popup blocked. Please allow popups for this site and try again.', 'error');
+      return;
     }
-    await document.fonts.ready;
-    await new Promise(r => setTimeout(r, 200));
 
-    await html2pdf()
-      .set({
-        margin: 0,
-        filename: `${safeName}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          letterRendering: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          width: 794,
-          height: 1123,
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-        },
-      })
-      .from(container)
-      .save();
+    popup.document.open();
+    popup.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice - ${esc(invoiceNumber(formData))}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+      color: #1E293B;
+      background: #fff;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { margin: 0; padding: 0; }
+    }
+  </style>
+</head>
+<body>${invoiceHTML}</body>
+</html>`);
+    popup.document.close();
 
-    showToast('PDF downloaded successfully!', 'success');
+    // Wait for fonts to load, then auto-trigger print
+    let printed = false;
+    const doPrint = () => {
+      if (printed) return;
+      printed = true;
+      try {
+        popup.focus();
+        popup.print();
+      } catch {
+        showToast('Please use Ctrl+P / Cmd+P to save as PDF.', 'info');
+      }
+    };
+
+    // Wait for fonts to be ready
+    try {
+      popup.document.fonts.ready.then(() => setTimeout(doPrint, 300));
+    } catch {
+      setTimeout(doPrint, 1500);
+    }
+
+    // Safety fallback — print after 3s even if fonts are slow
+    setTimeout(doPrint, 3000);
+
+    showToast('PDF ready — choose "Save as PDF" in the print dialog.', 'info', 5000);
   } catch (err) {
     console.error('[pdf] Download failed:', err);
-    showToast('Failed to generate PDF. Please try again.', 'error');
-  } finally {
-    // Always clean up the hidden container
-    try { document.body.removeChild(container); } catch {}
+    showToast('Failed to open PDF. Please try again.', 'error');
   }
+}
+
+function invoiceNumber(formData) {
+  return formData ? (formData.invoiceNumber || 'invoice') : 'invoice';
 }
 
 /**

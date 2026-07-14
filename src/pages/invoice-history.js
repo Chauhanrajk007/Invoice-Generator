@@ -108,12 +108,24 @@ async function renderList(container) {
                   <td>${escapeHtml(inv.customerName || 'Unknown')}</td>
                   <td>${formatDate(inv.date || inv.createdAt)}</td>
                   <td class="text-right fw-600">${formatCurrency(inv.grandTotal)}</td>
-                  <td>
-                    <select class="badge badge-${inv.status || 'draft'} status-select" data-id="${escAttr(inv.id)}" style="border:none;cursor:pointer;font-size:0.75rem;font-weight:600;padding:3px 8px;border-radius:20px;background-color:inherit;color:inherit;">
-                      <option value="draft" ${inv.status === 'draft' ? 'selected' : ''}>Draft</option>
-                      <option value="pending" ${inv.status === 'pending' ? 'selected' : ''}>Pending</option>
-                      <option value="paid" ${inv.status === 'paid' ? 'selected' : ''}>Paid</option>
-                    </select>
+                   <td>
+                    <div class="status-dropdown-wrap" data-id="${escAttr(inv.id)}" data-status="${escAttr(inv.status || 'draft')}">
+                      <button class="badge badge-${inv.status || 'draft'} status-dropdown-btn">
+                        ${(inv.status || 'draft').charAt(0).toUpperCase() + (inv.status || 'draft').slice(1)}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;opacity:0.7;"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                      <div class="status-dropdown-menu">
+                        <button class="status-dropdown-item ${inv.status === 'draft' ? 'active' : ''}" data-value="draft">
+                          <span class="status-dot" style="background:#94A3B8;"></span>Draft
+                        </button>
+                        <button class="status-dropdown-item ${inv.status === 'pending' ? 'active' : ''}" data-value="pending">
+                          <span class="status-dot" style="background:#F59E0B;"></span>Pending
+                        </button>
+                        <button class="status-dropdown-item ${inv.status === 'paid' ? 'active' : ''}" data-value="paid">
+                          <span class="status-dot" style="background:#10B981;"></span>Paid
+                        </button>
+                      </div>
+                    </div>
                   </td>
                   <td class="text-center">
                     <div style="display:flex;gap:4px;justify-content:center;">
@@ -198,23 +210,50 @@ async function renderList(container) {
     });
   });
 
-  // Status change
-  container.querySelectorAll('.status-select').forEach(select => {
-    select.addEventListener('change', async (e) => {
-      const id = select.getAttribute('data-id');
-      const newStatus = e.target.value;
-      if (id && newStatus) {
+  // Status dropdown — toggle open/close
+  container.querySelectorAll('.status-dropdown-wrap').forEach(wrap => {
+    const btn = wrap.querySelector('.status-dropdown-btn');
+    const menu = wrap.querySelector('.status-dropdown-menu');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close all other open dropdowns first
+      container.querySelectorAll('.status-dropdown-menu.open').forEach(m => {
+        if (m !== menu) m.classList.remove('open');
+      });
+      menu.classList.toggle('open');
+    });
+
+    menu.querySelectorAll('.status-dropdown-item').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = wrap.getAttribute('data-id');
+        const newStatus = item.getAttribute('data-value');
+        const currentStatus = wrap.getAttribute('data-status');
+
+        if (!id || !newStatus || newStatus === currentStatus) {
+          menu.classList.remove('open');
+          return;
+        }
+
         const allowed = await hasPermission(ACTIONS.CHANGE_STATUS);
         if (!allowed) {
           showToast('You don\'t have permission to change invoice status.', 'error');
-          await renderList(container);
+          menu.classList.remove('open');
           return;
         }
+
         await updateInvoiceStatus(id, newStatus);
         showToast(`Status updated to ${newStatus}.`, 'success');
+        menu.classList.remove('open');
         await renderList(container);
-      }
+      });
     });
+  });
+
+  // Close dropdowns when clicking outside
+  document.addEventListener('click', () => {
+    container.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
   });
 
   // Email buttons
