@@ -223,71 +223,67 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
 
   const safeName = String(filename || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
 
+  // Create a hidden off-screen container — never touch the live preview
+  const container = document.createElement('div');
+  container.style.cssText = [
+    'position:fixed',
+    'top:-9999px',
+    'left:-9999px',
+    'width:794px',          // A4 at 96dpi
+    'height:1123px',        // A4 at 96dpi
+    'overflow:hidden',
+    'background:#ffffff',
+    'z-index:-1',
+    'pointer-events:none',
+  ].join(';');
+
   try {
     const invoiceHTML = generateProfessionalInvoiceHTML(formData, summary, settings || {});
+    container.innerHTML = invoiceHTML;
+    document.body.appendChild(container);
 
-    // Temporarily swap the preview element's content with the PDF-ready HTML
-    // so html2canvas captures what's already visible on screen.
-    const originalHTML = previewElement.innerHTML;
-    const originalStyle = previewElement.getAttribute('style') || '';
-
-    // Store original classes and container styles
-    const previewParent = previewElement.parentElement;
-    const parentOriginalStyle = previewParent ? previewParent.getAttribute('style') || '' : '';
-    const grandParent = previewParent ? previewParent.parentElement : null;
-    const grandParentOriginalStyle = grandParent ? grandParent.getAttribute('style') || '' : '';
-
-    try {
-      // Expand the preview to full A4 width so html2canvas captures it properly
-      if (grandParent) grandParent.style.cssText = 'width:794px;overflow:visible;position:static !important;';
-      if (previewParent) previewParent.style.cssText = 'width:794px;overflow:visible;position:static !important;';
-      previewElement.style.cssText = 'width:794px;overflow:visible;position:static !important;padding:0;margin:0;';
-      previewElement.innerHTML = invoiceHTML;
-
-      // Wait for rendering
-      const imgs = previewElement.querySelectorAll('img');
-      if (imgs.length > 0) {
-        await Promise.all(Array.from(imgs).map(img => {
-          if (img.complete) return Promise.resolve();
-          return new Promise(r => { img.onload = r; img.onerror = r; setTimeout(r, 2000); });
-        }));
-      }
-      await document.fonts.ready;
-      await new Promise(r => setTimeout(r, 300));
-
-      await html2pdf()
-        .set({
-          margin: 0,
-          filename: `${safeName}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            letterRendering: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff',
-          },
-          jsPDF: {
-            unit: 'mm',
-            format: 'a4',
-            orientation: 'portrait',
-          },
-        })
-        .from(previewElement)
-        .save();
-
-      showToast('PDF downloaded successfully!', 'success');
-    } finally {
-      // Restore everything
-      previewElement.innerHTML = originalHTML;
-      previewElement.setAttribute('style', originalStyle);
-      if (previewParent) previewParent.setAttribute('style', parentOriginalStyle);
-      if (grandParent) grandParent.setAttribute('style', grandParentOriginalStyle);
+    // Wait for fonts and images inside the hidden container
+    const imgs = container.querySelectorAll('img');
+    if (imgs.length > 0) {
+      await Promise.all(Array.from(imgs).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(r => { img.onload = r; img.onerror = r; setTimeout(r, 2000); });
+      }));
     }
+    await document.fonts.ready;
+    await new Promise(r => setTimeout(r, 200));
+
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename: `${safeName}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          letterRendering: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+      })
+      .from(container)
+      .save();
+
+    showToast('PDF downloaded successfully!', 'success');
   } catch (err) {
     console.error('[pdf] Download failed:', err);
     showToast('Failed to generate PDF. Please try again.', 'error');
+  } finally {
+    // Always clean up the hidden container
+    try { document.body.removeChild(container); } catch {}
   }
 }
 
