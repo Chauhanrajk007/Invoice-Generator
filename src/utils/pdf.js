@@ -150,13 +150,6 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   <!-- ═══ BOTTOM BLOCK (absolute bottom) ═══ -->
   <div style="position:absolute;bottom:0;left:0;right:0;z-index:2;">
 
-    <!-- Terms -->
-    ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
-    <div style="padding:0 40px 10px;">
-      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#4F6EF7;margin-bottom:4px;">Terms &amp; Conditions</div>
-      <div style="font-size:9px;color:#94A3B8;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
-    </div>` : ''}
-
     <!-- Amount in Words + Payment + Signature row -->
     <div style="padding:0 40px 10px;display:flex;gap:20px;">
       <div style="flex:1;">
@@ -184,6 +177,13 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
         </div>
       </div>
     </div>
+
+    <!-- Terms -->
+    ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
+    <div style="padding:0 40px 10px;">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#4F6EF7;margin-bottom:4px;">Terms &amp; Conditions</div>
+      <div style="font-size:9px;color:#94A3B8;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
+    </div>` : ''}
 
     <!-- Footer bar -->
     <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);padding:10px 40px;display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #E2E8F0;">
