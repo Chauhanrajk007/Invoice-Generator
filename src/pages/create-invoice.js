@@ -355,15 +355,15 @@ function renderForm(container, formData, isViewMode, isGstMode, settings) {
           <label class="form-label">Recipient Email</label>
           <input type="email" class="form-input" id="emailRecipient" value="${escAttr(formData.customerEmail)}" placeholder="customer@email.com" />
         </div>
-        <div class="modal-actions" style="gap:8px;">
-          <button class="btn btn-secondary" id="emailModalCancel">Cancel</button>
-          <button class="btn btn-primary" id="emailSendMailto">
+        <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
+          <button class="btn btn-secondary" id="emailModalCancel" style="width:100%;order:3;">Cancel</button>
+          <button class="btn btn-primary" id="emailSendMailto" style="flex:1;min-width:0;order:1;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            Send via Email
+            Email
           </button>
-          <button class="btn btn-secondary" id="emailSendGMass" style="background:#D44638;color:#fff;border-color:#D44638;">
+          <button class="btn btn-secondary" id="emailSendGMass" style="background:#D44638;color:#fff;border-color:#D44638;flex:1;min-width:0;order:2;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            Send via GMass
+            Gmail
           </button>
         </div>
       </div>

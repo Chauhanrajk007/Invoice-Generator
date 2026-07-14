@@ -220,19 +220,19 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
 
   const safeName = String(filename || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
   let container = null;
+  const prevScroll = window.scrollY;
 
   try {
     // Create a temporary container with the professional template.
-    // CRITICAL: Must be in-viewport (not off-screen) for html2canvas to capture it.
-    // We use opacity:0 + pointer-events:none so it's invisible but renderable.
+    // CRITICAL: html2canvas MUST see the element fully visible and in-viewport.
+    // We temporarily overlay it on top of everything, capture, then remove.
     container = document.createElement('div');
-    container.style.cssText = 'position:absolute;left:0;top:0;width:210mm;z-index:-1;opacity:0.01;pointer-events:none;';
+    container.style.cssText = 'position:fixed;left:0;top:0;width:210mm;background:#fff;z-index:2147483647;';
     document.body.appendChild(container);
 
     if (formData && summary) {
       container.innerHTML = generateProfessionalInvoiceHTML(formData, summary, settings || {});
     } else {
-      // Fallback: use the preview element content with explicit sizing
       container.innerHTML = previewElement.innerHTML;
     }
 
@@ -249,8 +249,9 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
       }));
     }
 
-    // Small delay for rendering
-    await new Promise(r => setTimeout(r, 300));
+    // Wait for fonts + rendering
+    await document.fonts.ready;
+    await new Promise(r => setTimeout(r, 500));
 
     const opt = {
       margin: 0,
@@ -259,12 +260,8 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
       html2canvas: {
         scale: 2,
         useCORS: true,
-        logging: false,
+        logging: true,
         letterRendering: true,
-        width: container.scrollWidth,
-        height: container.scrollHeight,
-        windowWidth: container.scrollWidth,
-        windowHeight: container.scrollHeight,
       },
       jsPDF: {
         unit: 'mm',
@@ -283,6 +280,7 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
     if (container && container.parentNode) {
       try { document.body.removeChild(container); } catch {}
     }
+    window.scrollTo(0, prevScroll);
   }
 }
 
