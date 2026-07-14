@@ -46,7 +46,7 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   const items = (formData.items || []).filter(i => i && i.name);
 
   return `
-<div style="position:relative;width:210mm;min-height:297mm;padding:0;margin:0 auto;background:#fff;font-family:'Inter','Segoe UI',Arial,sans-serif;color:#1E293B;font-size:12px;line-height:1.5;overflow:hidden;">
+<div style="position:relative;width:210mm;height:297mm;padding:0;margin:0 auto;background:#ffffff;font-family:'Inter','Segoe UI',Arial,sans-serif;color:#1E293B;font-size:12px;line-height:1.5;overflow:hidden;display:flex;flex-direction:column;">
   
   <!-- Status Watermark -->
   <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:100px;font-weight:900;color:${wmColor};opacity:0.06;pointer-events:none;white-space:nowrap;z-index:0;letter-spacing:8px;">
@@ -54,25 +54,25 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   </div>
 
   <!-- Header Bar -->
-  <div style="background:linear-gradient(135deg,#4F6EF7 0%,#3B5BDE 100%);padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1;">
-    <div style="color:#fff;max-width:55%;">
+  <div style="background:linear-gradient(135deg,#4F6EF7 0%,#3B5BDE 100%);padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1;flex-shrink:0;">
+    <div style="color:#ffffff;max-width:55%;">
       ${formData.businessLogo ? `<img src="${formData.businessLogo}" alt="Logo" style="max-width:80px;max-height:50px;margin-bottom:8px;border-radius:6px;" />` : ''}
-      <div style="font-size:20px;font-weight:700;margin-bottom:2px;font-family:'DM Sans','Inter',sans-serif;">${esc(formData.businessName) || 'Your Business'}</div>
-      ${formData.businessPhone ? `<div style="font-size:11px;opacity:0.9;margin-top:2px;">${esc(formData.businessPhone)}</div>` : ''}
-      ${formData.businessEmail ? `<div style="font-size:11px;opacity:0.9;">${esc(formData.businessEmail)}</div>` : ''}
-      ${formData.businessAddress ? `<div style="font-size:11px;opacity:0.9;">${esc(formData.businessAddress)}</div>` : ''}
-      ${formData.businessGstin ? `<div style="font-size:11px;opacity:0.9;margin-top:4px;"><strong>GSTIN:</strong> ${esc(formData.businessGstin)}</div>` : ''}
+      <div style="font-size:20px;font-weight:700;margin-bottom:2px;color:#ffffff;">${esc(formData.businessName) || 'Your Business'}</div>
+      ${formData.businessPhone ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);margin-top:2px;">${esc(formData.businessPhone)}</div>` : ''}
+      ${formData.businessEmail ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);">${esc(formData.businessEmail)}</div>` : ''}
+      ${formData.businessAddress ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);">${esc(formData.businessAddress)}</div>` : ''}
+      ${formData.businessGstin ? `<div style="font-size:11px;color:rgba(255,255,255,0.9);margin-top:4px;"><strong>GSTIN:</strong> ${esc(formData.businessGstin)}</div>` : ''}
     </div>
-    <div style="text-align:right;color:#fff;">
-      <div style="font-size:28px;font-weight:800;letter-spacing:1px;font-family:'DM Sans','Inter',sans-serif;">${isGst ? 'GST INVOICE' : 'INVOICE'}</div>
-      <div style="font-size:14px;font-weight:600;margin-top:6px;opacity:0.95;">${esc(formData.invoiceNumber) || 'INV-XXXX'}</div>
-      <div style="font-size:12px;margin-top:2px;opacity:0.85;">Date: ${esc(formData.date) || ''}</div>
-      <div style="margin-top:10px;display:inline-block;padding:4px 14px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(255,255,255,0.2);color:#fff;text-transform:uppercase;">${status}</div>
+    <div style="text-align:right;color:#ffffff;">
+      <div style="font-size:28px;font-weight:800;letter-spacing:1px;color:#ffffff;">${isGst ? 'GST INVOICE' : 'INVOICE'}</div>
+      <div style="font-size:14px;font-weight:600;margin-top:6px;color:rgba(255,255,255,0.95);">${esc(formData.invoiceNumber) || 'INV-XXXX'}</div>
+      <div style="font-size:12px;margin-top:2px;color:rgba(255,255,255,0.85);">Date: ${esc(formData.date) || ''}</div>
+      <div style="margin-top:10px;display:inline-block;padding:4px 14px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;background:rgba(255,255,255,0.2);color:#ffffff;text-transform:uppercase;">${status}</div>
     </div>
   </div>
 
   <!-- Bill To Section -->
-  <div style="padding:24px 36px 16px;display:flex;justify-content:space-between;gap:24px;position:relative;z-index:1;">
+  <div style="padding:24px 36px 16px;display:flex;justify-content:space-between;gap:24px;position:relative;z-index:1;flex-shrink:0;">
     <div style="flex:1;">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Bill To</div>
       <div style="font-size:15px;font-weight:700;color:#1E293B;margin-bottom:4px;">${esc(formData.customerName) || 'Customer Name'}</div>
@@ -90,7 +90,7 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   </div>
 
   <!-- Items Table -->
-  <div style="padding:0 36px;position:relative;z-index:1;">
+  <div style="padding:0 36px;position:relative;z-index:1;flex-shrink:0;">
     <table style="width:100%;border-collapse:collapse;margin-top:8px;">
       <thead>
         <tr style="background:#EEF1FE;">
@@ -109,16 +109,16 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
         ` : items.map((item, idx) => {
           const base = Number(item.qty || 0) * Number(item.price || 0);
           const tax = base * (Number(item.gstPercent || 0) / 100);
-          const bg = idx % 2 === 0 ? '#fff' : '#FAFBFF';
+          const bg = idx % 2 === 0 ? '#ffffff' : '#FAFBFF';
           return `
             <tr style="background:${bg};">
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;">${idx + 1}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:600;">${esc(item.name)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#1E293B;">${idx + 1}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;font-weight:600;color:#1E293B;">${esc(item.name)}</td>
               ${isGst ? `<td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;color:#475569;">${esc(item.hsn) || '—'}</td>` : ''}
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;">${Number(item.qty || 0)}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;">${fmt(item.price)}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;">${Number(item.gstPercent || 0)}%</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;font-weight:600;">${fmt(base + tax)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;color:#1E293B;">${Number(item.qty || 0)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;color:#1E293B;">${fmt(item.price)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:center;color:#1E293B;">${Number(item.gstPercent || 0)}%</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;font-size:12px;text-align:right;font-weight:600;color:#1E293B;">${fmt(base + tax)}</td>
             </tr>`;
         }).join('')}
       </tbody>
@@ -126,10 +126,10 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
   </div>
 
   <!-- Summary -->
-  <div style="padding:16px 36px 0;display:flex;justify-content:flex-end;position:relative;z-index:1;">
+  <div style="padding:16px 36px 0;display:flex;justify-content:flex-end;position:relative;z-index:1;flex-shrink:0;">
     <div style="width:280px;">
       <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-        <span>Subtotal</span><span style="font-weight:600;">${fmt(summary.subtotal)}</span>
+        <span>Subtotal</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.subtotal)}</span>
       </div>
       ${summary.discount > 0 ? `
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#EF4444;">
@@ -138,18 +138,18 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
       ` : ''}
       ${isGst ? (summary.interState ? `
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>IGST</span><span style="font-weight:600;">${fmt(summary.igst)}</span>
+          <span>IGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.igst)}</span>
         </div>
       ` : `
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>CGST</span><span style="font-weight:600;">${fmt(summary.cgst)}</span>
+          <span>CGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.cgst)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>SGST</span><span style="font-weight:600;">${fmt(summary.sgst)}</span>
+          <span>SGST</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.sgst)}</span>
         </div>
       `) : (summary.totalTax > 0 ? `
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>Tax (GST)</span><span style="font-weight:600;">${fmt(summary.totalTax)}</span>
+          <span>Tax (GST)</span><span style="font-weight:600;color:#1E293B;">${fmt(summary.totalTax)}</span>
         </div>
       ` : '')}
       <div style="display:flex;justify-content:space-between;padding:12px 0 6px;font-size:16px;font-weight:800;color:#1E293B;border-top:2px solid #4F6EF7;margin-top:6px;">
@@ -160,7 +160,7 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
 
   <!-- Amount in Words -->
   ${amountWords ? `
-  <div style="padding:12px 36px;position:relative;z-index:1;">
+  <div style="padding:12px 36px;position:relative;z-index:1;flex-shrink:0;">
     <div style="background:#F8FAFC;border-radius:8px;padding:10px 16px;font-size:11px;color:#475569;">
       <strong style="color:#1E293B;">Amount in words:</strong> ${amountWords}
     </div>
@@ -169,24 +169,27 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
 
   <!-- Payment Details -->
   ${(settings?.bankName || settings?.accountNumber || settings?.upiId) ? `
-  <div style="padding:8px 36px;position:relative;z-index:1;">
+  <div style="padding:8px 36px;position:relative;z-index:1;flex-shrink:0;">
     <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:12px 16px;">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#16A34A;margin-bottom:6px;">Payment Details</div>
       <div style="display:flex;gap:32px;flex-wrap:wrap;font-size:11px;color:#475569;">
-        ${settings.bankName ? `<div><strong>Bank:</strong> ${esc(settings.bankName)}</div>` : ''}
-        ${settings.accountNumber ? `<div><strong>A/C:</strong> ${esc(settings.accountNumber)}</div>` : ''}
-        ${settings.ifscCode ? `<div><strong>IFSC:</strong> ${esc(settings.ifscCode)}</div>` : ''}
-        ${settings.upiId ? `<div><strong>UPI:</strong> ${esc(settings.upiId)}</div>` : ''}
+        ${settings.bankName ? `<div><strong style="color:#1E293B;">Bank:</strong> ${esc(settings.bankName)}</div>` : ''}
+        ${settings.accountNumber ? `<div><strong style="color:#1E293B;">A/C:</strong> ${esc(settings.accountNumber)}</div>` : ''}
+        ${settings.ifscCode ? `<div><strong style="color:#1E293B;">IFSC:</strong> ${esc(settings.ifscCode)}</div>` : ''}
+        ${settings.upiId ? `<div><strong style="color:#1E293B;">UPI:</strong> ${esc(settings.upiId)}</div>` : ''}
       </div>
     </div>
   </div>
   ` : ''}
 
-  <!-- Footer: Terms + Signature -->
-  <div style="padding:20px 36px 28px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-top:auto;position:relative;z-index:1;">
+  <!-- Spacer to push footer to bottom -->
+  <div style="flex:1;"></div>
+
+  <!-- Footer: Terms + Signature — always at the bottom of the page -->
+  <div style="padding:20px 36px 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;position:relative;z-index:1;flex-shrink:0;">
     <div style="flex:1;max-width:60%;">
       ${(formData.termsAndConditions || settings?.termsAndConditions) ? `
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Terms & Conditions</div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4F6EF7;margin-bottom:6px;">Terms &amp; Conditions</div>
         <div style="font-size:10px;color:#64748B;line-height:1.5;white-space:pre-line;">${esc(formData.termsAndConditions || settings?.termsAndConditions || '')}</div>
       ` : ''}
     </div>
@@ -196,9 +199,9 @@ export function generateProfessionalInvoiceHTML(formData, summary, settings) {
     </div>
   </div>
 
-  <!-- Bottom Bar -->
-  <div style="background:#F8FAFC;padding:10px 36px;text-align:center;font-size:9px;color:#94A3B8;border-top:1px solid #E2E8F0;position:relative;z-index:1;">
-    Generated by InvoiceFlow • ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+  <!-- Bottom Bar — copyright always at the very bottom -->
+  <div style="background:#EEF1FE;padding:10px 36px;text-align:center;font-size:9px;color:#4F6EF7;border-top:2px solid #D6DDFC;position:relative;z-index:1;flex-shrink:0;font-weight:600;letter-spacing:0.3px;">
+    © ${new Date().getFullYear()} ${esc(formData.businessName) || 'InvoiceFlow'} &nbsp;|&nbsp; Generated by InvoiceFlow &nbsp;|&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
   </div>
 </div>`;
 }
@@ -263,6 +266,7 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
             logging: false,
             letterRendering: true,
             allowTaint: true,
+            backgroundColor: '#ffffff',
           },
           jsPDF: {
             unit: 'mm',
