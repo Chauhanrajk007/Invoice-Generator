@@ -219,68 +219,69 @@ export async function downloadPDF(previewElement, filename, formData, summary, s
   }
 
   const safeName = String(filename || 'invoice').replace(/[^a-zA-Z0-9_-]/g, '_');
-  let container = null;
-  const prevScroll = window.scrollY;
 
   try {
-    // Create a temporary container with the professional template.
-    // CRITICAL: html2canvas MUST see the element fully visible and in-viewport.
-    // We temporarily overlay it on top of everything, capture, then remove.
-    container = document.createElement('div');
-    container.style.cssText = 'position:fixed;left:0;top:0;width:210mm;background:#fff;z-index:2147483647;';
+    const invoiceHTML = generateProfessionalInvoiceHTML(formData, summary, settings || {});
+
+    // Directly inject into a visible, in-flow container.
+    // html2canvas MUST see the element rendered on screen with real dimensions.
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:0;top:0;width:794px;z-index:2147483647;background:#fff;overflow:visible;';
+    container.innerHTML = invoiceHTML;
+
+    // Override the inner wrapper to use pixel width
+    const inner = container.querySelector('div');
+    if (inner) {
+      inner.style.width = '794px';
+      inner.style.position = 'static';
+      inner.style.overflow = 'visible';
+      inner.style.minHeight = 'auto';
+    }
+
     document.body.appendChild(container);
 
-    if (formData && summary) {
-      container.innerHTML = generateProfessionalInvoiceHTML(formData, summary, settings || {});
-    } else {
-      container.innerHTML = previewElement.innerHTML;
-    }
-
-    // Wait for images to load
-    const images = container.querySelectorAll('img');
-    if (images.length > 0) {
-      await Promise.all(Array.from(images).map(img => {
+    // Wait for images + fonts
+    const imgs = container.querySelectorAll('img');
+    if (imgs.length > 0) {
+      await Promise.all(Array.from(imgs).map(img => {
         if (img.complete) return Promise.resolve();
-        return new Promise(resolve => {
-          img.onload = resolve;
-          img.onerror = resolve;
-          setTimeout(resolve, 2000);
-        });
+        return new Promise(r => { img.onload = r; img.onerror = r; setTimeout(r, 2000); });
       }));
     }
-
-    // Wait for fonts + rendering
     await document.fonts.ready;
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 400));
 
-    const opt = {
-      margin: 0,
-      filename: `${safeName}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: true,
-        letterRendering: true,
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-      },
-    };
+    // Capture the FIRST child element (the styled invoice div)
+    const target = container.firstElementChild;
+    console.log('[pdf] Capturing element:', target ? target.tagName : 'none', 'dims:', target ? `${target.offsetWidth}x${target.offsetHeight}` : 'n/a');
 
-    await html2pdf().set(opt).from(container).save();
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename: `${safeName}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: true,
+          letterRendering: true,
+          allowTaint: true,
+          windowWidth: 794,
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+      })
+      .from(target || container)
+      .save();
 
+    try { document.body.removeChild(container); } catch {}
     showToast('PDF downloaded successfully!', 'success');
   } catch (err) {
     console.error('[pdf] Download failed:', err);
     showToast('Failed to generate PDF. Please try again.', 'error');
-  } finally {
-    if (container && container.parentNode) {
-      try { document.body.removeChild(container); } catch {}
-    }
-    window.scrollTo(0, prevScroll);
   }
 }
 
